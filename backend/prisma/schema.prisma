@@ -6,3 +6,153 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+enum SaleStatus {
+  SCHEDULED
+  ACTIVE
+  ENDED
+}
+
+enum ReservationStatus {
+  ACTIVE
+  PAYMENT_PENDING
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+enum PaymentStatus {
+  SUCCESS
+  FAILED
+  PENDING
+}
+
+enum EmailType {
+  ORDER_PAID
+  SALE_ENDED_CART_CLEARED
+}
+
+enum EmailStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+}
+
+model User {
+  id       Int    @id @default(autoincrement())
+  username String @unique
+  email    String
+  role     Role   @default(CUSTOMER)
+
+  reservations Reservation[]
+  orders       Order[]
+  emails       EmailOutbox[]
+}
+
+model Product {
+  id          Int    @id @default(autoincrement())
+  name        String
+  description String
+  imageUrl    String @map("image_url")
+
+  sales Sale[]
+}
+
+model Sale {
+  id             Int        @id @default(autoincrement())
+  productId      Int        @map("product_id")
+  priceCents     Int        @map("price_cents")
+  totalStock     Int        @map("total_stock")
+  availableStock Int        @map("available_stock")
+  startsAt       DateTime   @map("starts_at")
+  endsAt         DateTime   @map("ends_at")
+  status         SaleStatus @default(SCHEDULED)
+
+  product      Product       @relation(fields: [productId], references: [id])
+  reservations Reservation[]
+  orders       Order[]
+
+  @@index([status, startsAt])
+  @@index([status, endsAt])
+}
+
+model Reservation {
+  id        Int               @id @default(autoincrement())
+  userId    Int               @map("user_id")
+  saleId    Int               @map("sale_id")
+  quantity  Int               @default(1)
+  status    ReservationStatus @default(ACTIVE)
+  expiresAt DateTime          @map("expires_at")
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  user   User          @relation(fields: [userId], references: [id])
+  sale   Sale          @relation(fields: [saleId], references: [id])
+  order  Order?
+  emails EmailOutbox[]
+
+  @@index([status, expiresAt])
+  @@index([userId, saleId])
+}
+
+model Order {
+  id            Int         @id @default(autoincrement())
+  userId        Int         @map("user_id")
+  saleId        Int         @map("sale_id")
+  reservationId Int         @unique @map("reservation_id")
+  amountCents   Int         @map("amount_cents")
+  status        OrderStatus
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  user        User          @relation(fields: [userId], references: [id])
+  sale        Sale          @relation(fields: [saleId], references: [id])
+  reservation Reservation   @relation(fields: [reservationId], references: [id])
+  payments    Payment[]
+  emails      EmailOutbox[]
+
+  @@index([userId])
+}
+
+model Payment {
+  id             Int           @id @default(autoincrement())
+  orderId        Int           @map("order_id")
+  idempotencyKey String        @unique @map("idempotency_key")
+  status         PaymentStatus
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id])
+}
+
+model EmailOutbox {
+  id            Int         @id @default(autoincrement())
+  type          EmailType
+  userId        Int         @map("user_id")
+  toEmail       String      @map("to_email")
+  orderId       Int?        @map("order_id")
+  reservationId Int?        @map("reservation_id")
+  payload       Json
+  status        EmailStatus @default(PENDING)
+  attempts      Int         @default(0)
+  lastError     String?     @map("last_error")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  sentAt        DateTime?   @map("sent_at")
+
+  user        User         @relation(fields: [userId], references: [id])
+  order       Order?       @relation(fields: [orderId], references: [id])
+  reservation Reservation? @relation(fields: [reservationId], references: [id])
+
+  @@unique([orderId, type])
+  @@unique([reservationId, type])
+  @@index([status, createdAt])
+}

@@ -150,7 +150,7 @@ flowchart LR
 
 \- \*\*Reservation\*\* (корзина): `id`, `userId`, `saleId`, `quantity`, `status` (`ACTIVE`/`PAYMENT\_PENDING`/`COMPLETED`/`EXPIRED`/`CANCELLED`), `expiresAt`, `createdAt`.
 
-\- \*\*Order\*\*: `id`, `userId`, `saleId`, `reservationId` (\*\*unique\*\*), `amountCents`, `status` (`PENDING`/`PAID`/`FAILED`).
+\- \*\*Order\*\*: `id`, `userId`, `saleId`, `reservationId` (\*\*unique\*\*), `amountCents`, `status` (`PENDING`/`PAID`/`FAILED`), `createdAt` (для сортировки заказов в кабинете и «последних заказов» на дашборде).
 
 \- \*\*Payment\*\*: `id`, `orderId`, `idempotencyKey` (\*\*unique\*\*), `status` (`SUCCESS`/`FAILED`/`PENDING`), `createdAt`.
 
@@ -183,6 +183,8 @@ flowchart LR
 \- Уникальные ограничения — последняя линия защиты: `Order.reservationId`, `Payment.idempotencyKey`, `EmailOutbox(orderId, type)`, `EmailOutbox(reservationId, type)`.
 
 \- `CHECK (available\_stock >= 0 AND available\_stock <= total\_stock)` добавляется SQL-миграцией.
+
+\- Имена таблиц совпадают с моделями Prisma (`"Sale"`, `"Reservation"`, …), колонки — snake\_case через `@map` (`available\_stock`), поэтому raw SQL пишется как `SELECT ... FROM "Sale" WHERE id = $1 FOR UPDATE`. Id — `Int` autoincrement.
 
 \- Время берётся только на сервере (`now` в сервисах). Клиент получает `serverTime`, чтобы скорректировать таймеры.
 
