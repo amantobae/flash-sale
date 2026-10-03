@@ -3,8 +3,10 @@ import { createApp } from './app';
 import { config } from './config';
 import { prisma } from './db';
 import { startTicker } from './jobs/saleTicker';
+import { closeRealtime, initRealtime } from './realtime/socket';
 
 const server = http.createServer(createApp());
+initRealtime(server);
 let stopTicker: (() => void) | undefined;
 
 server.listen(config.PORT, () => {
@@ -15,9 +17,10 @@ server.listen(config.PORT, () => {
 function shutdown(signal: string) {
   console.log(`${signal} received, shutting down`);
   stopTicker?.();
-  server.close(() => {
-    prisma.$disconnect().finally(() => process.exit(0));
-  });
+  closeRealtime()
+    .catch((err) => console.error('Realtime shutdown failed', err))
+    .then(() => prisma.$disconnect())
+    .finally(() => process.exit(0));
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));

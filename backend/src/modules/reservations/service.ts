@@ -1,6 +1,7 @@
 import type { Reservation, SaleStatus } from '@prisma/client';
 import { prisma } from '../../db';
 import { AppError } from '../../errors';
+import { emitReservationUpdated, emitSaleStock } from '../../realtime/socket';
 
 export const RESERVATION_HOLD_MS = 10 * 60 * 1000;
 
@@ -77,7 +78,9 @@ export async function reserve(saleId: number, userId: number, now: Date): Promis
 }
 
 // Must only be called after the reserve transaction has committed.
-export async function afterReserveCommit(_result: ReserveResult): Promise<void> {}
+export async function afterReserveCommit({ reservation, availableStock }: ReserveResult): Promise<void> {
+  emitSaleStock({ saleId: reservation.saleId, availableStock });
+}
 
 export async function getCurrentReservation(userId: number): Promise<Reservation | null> {
   return prisma.reservation.findFirst({
@@ -130,4 +133,7 @@ export async function cancelReservation(reservationId: number, userId: number): 
 }
 
 // Must only be called after the cancel transaction has committed.
-export async function afterCancelCommit(_result: CancelResult): Promise<void> {}
+export async function afterCancelCommit({ reservation, availableStock }: CancelResult): Promise<void> {
+  emitSaleStock({ saleId: reservation.saleId, availableStock });
+  emitReservationUpdated(reservation.userId, { reservationId: reservation.id, status: reservation.status });
+}

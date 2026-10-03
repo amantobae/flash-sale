@@ -8,7 +8,8 @@
     "start": "prisma migrate deploy && node dist/server.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "seed": "tsx --env-file=.env prisma/seed.ts"
   },
   "engines": {
     "node": ">=20.6"

@@ -56,7 +56,7 @@ flash-sale/
 
 &#x20; backend/
 
-&#x20;   prisma/schema.prisma, migrations/, seed.ts
+&#x20;   prisma/schema.prisma, migrations/, seed.ts   # npm run seed: demo product + sale, idempotent
 
 &#x20;   src/
 
@@ -370,7 +370,7 @@ stateDiagram-v2
 
 \- `POST /api/users/login` `{ username }` — найти или создать пользователя.
 
-\- `GET /api/sales/current` — распродажа, товар, `status`, `startsAt`, `endsAt`, `availableStock`, `serverTime`.
+\- `GET /api/sales/current` — без авторизации, `{ sale: { id, status, priceCents, availableStock, startsAt, endsAt, product: { id, name, description, imageUrl } }, serverTime }`. Выбирается распродажа не в статусе `ENDED` (если их несколько — с самым ранним `startsAt`), иначе последняя по `endsAt`; распродаж нет → 404 `SALE\_NOT\_FOUND`. `serverTime` — серверные часы на момент запроса.
 
 \- `POST /api/sales/:id/reservations` — зарезервировать (409 при `SOLD\_OUT`, `SALE\_NOT\_ACTIVE`, `ALREADY\_RESERVED`).
 
@@ -396,7 +396,9 @@ stateDiagram-v2
 
 
 
-Клиент → сервер: `sale:join { saleId }` (комната `sale:{id}`), `user:join { userId }` (комната `user:{id}`), `dashboard:join`.
+Клиент → сервер: `sale:join { saleId }` (комната `sale:{id}`), `user:join { userId }` (комната `user:{id}`), `dashboard:join`. Payload проверяется zod (`saleId`/`userId` — положительное целое). Невалидный payload игнорируется: комната не меняется, сервер не падает. Если клиент передал ack, сервер отвечает `{ ok: true }` или `{ ok: false }`.
+
+Инициализация — `initRealtime(httpServer)` в `server.ts` (не в `app.ts`). Пока realtime не инициализирован (например, в HTTP-тестах), emit-хелперы ничего не делают. События отправляются только из post-commit хуков сервисов и ticker и только если транзакция что-то записала; ответ 409, повтор (replay) и откат транзакции ничего не шлют. Событие в несколько комнат уходит одним `io.to([...])`, поэтому клиент, сидящий в двух комнатах, получает его один раз.
 
 
 
@@ -404,13 +406,13 @@ stateDiagram-v2
 
 
 
-\- `sale:stock { saleId, availableStock }` → `sale:{id}`, `dashboard`;
+\- `sale:stock { saleId, availableStock }` → `sale:{id}`, `dashboard` (резерв, отмена, истечение, завершение, resolve FAILED);
 
-\- `sale:status { saleId, status, startsAt, endsAt, serverTime }` → `sale:{id}`, `dashboard` (старт, завершение, изменение времени);
+\- `sale:status { saleId, status, startsAt, endsAt, serverTime }` → `sale:{id}`, `dashboard` (старт, завершение, изменение времени); даты в ISO-строках;
 
-\- `reservation:updated { reservationId, status }` → `user:{id}` (истекла или очищена при завершении);
+\- `reservation:updated { reservationId, status }` → `user:{id}` владельца (отмена, истечение, очистка при завершении, а также смена статуса при checkout и resolve: `COMPLETED`, `PAYMENT\_PENDING`, `CANCELLED`, или `ACTIVE` после checkout FAILED);
 
-\- `order:updated { orderId, status }` → `user:{id}`, `dashboard`.
+\- `order:updated { orderId, status }` → `user:{id}`, `dashboard` (checkout и resolve).
 
 
 

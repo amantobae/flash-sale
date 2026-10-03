@@ -1,5 +1,6 @@
 import type { Prisma, Reservation, SaleStatus } from '@prisma/client';
 import { prisma } from '../db';
+import { emitReservationUpdated, emitSaleStatus, emitSaleStock } from '../realtime/socket';
 
 type LockedSale = {
   id: number;
@@ -23,6 +24,7 @@ export type StartSaleResult = {
   status: SaleStatus;
   startsAt: Date;
   endsAt: Date;
+  serverTime: Date;
 };
 
 export async function startSales(now: Date): Promise<StartSaleResult[]> {
@@ -37,7 +39,13 @@ export async function startSales(now: Date): Promise<StartSaleResult[]> {
       const sale = await lockSale(tx, id);
       if (!sale || sale.status !== 'SCHEDULED' || sale.starts_at.getTime() > now.getTime()) return null;
       const updated = await tx.sale.update({ where: { id }, data: { status: 'ACTIVE' } });
-      return { saleId: id, status: updated.status, startsAt: updated.startsAt, endsAt: updated.endsAt };
+      return {
+        saleId: id,
+        status: updated.status,
+        startsAt: updated.startsAt,
+        endsAt: updated.endsAt,
+        serverTime: now,
+      };
     });
     if (result) {
       await afterStartSaleCommit(result);
@@ -48,10 +56,16 @@ export async function startSales(now: Date): Promise<StartSaleResult[]> {
 }
 
 // Must only be called after the start-sale transaction has committed.
-export async function afterStartSaleCommit(_result: StartSaleResult): Promise<void> {}
+export async function afterStartSaleCommit(result: StartSaleResult): Promise<void> {
+  emitSaleStatus(result);
+}
 
 export type EndSaleResult = {
   saleId: number;
+  status: SaleStatus;
+  startsAt: Date;
+  endsAt: Date;
+  serverTime: Date;
   availableStock: number;
   clearedReservations: Reservation[];
 };
@@ -94,10 +108,10 @@ export async function endSales(now: Date): Promise<EndSaleResult[]> {
       const updated = await tx.sale.update({
         where: { id },
         data: { status: 'ENDED', availableStock: { increment: returned } },
-        select: { availableStock: true },
+        select: { availableStock: true, status: true, startsAt: true, endsAt: true },
       });
       const clearedReservations = await tx.reservation.findMany({ where: { id: { in: ids } } });
-      return { saleId: id, availableStock: updated.availableStock, clearedReservations };
+      return { saleId: id, ...updated, serverTime: now, clearedReservations };
     });
     if (result) {
       await afterEndSaleCommit(result);
@@ -108,7 +122,13 @@ export async function endSales(now: Date): Promise<EndSaleResult[]> {
 }
 
 // Must only be called after the end-sale transaction has committed.
-export async function afterEndSaleCommit(_result: EndSaleResult): Promise<void> {}
+export async function afterEndSaleCommit(result: EndSaleResult): Promise<void> {
+  emitSaleStatus(result);
+  emitSaleStock({ saleId: result.saleId, availableStock: result.availableStock });
+  for (const r of result.clearedReservations) {
+    emitReservationUpdated(r.userId, { reservationId: r.id, status: r.status });
+  }
+}
 
 export type ExpireReservationsResult = {
   saleId: number;
@@ -153,7 +173,12 @@ export async function expireReservations(now: Date): Promise<ExpireReservationsR
 }
 
 // Must only be called after the expire transaction for this sale has committed.
-export async function afterExpireReservationsCommit(_result: ExpireReservationsResult): Promise<void> {}
+export async function afterExpireReservationsCommit(result: ExpireReservationsResult): Promise<void> {
+  emitSaleStock({ saleId: result.saleId, availableStock: result.availableStock });
+  for (const r of result.expiredReservations) {
+    emitReservationUpdated(r.userId, { reservationId: r.id, status: r.status });
+  }
+}
 
 export async function runTick(now: Date): Promise<void> {
   const steps = [startSales, endSales, expireReservations];

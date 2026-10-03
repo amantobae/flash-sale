@@ -1,6 +1,15 @@
-import { Prisma, type Order, type OrderStatus, type Payment, type PaymentStatus, type SaleStatus } from '@prisma/client';
+import {
+  Prisma,
+  type Order,
+  type OrderStatus,
+  type Payment,
+  type PaymentStatus,
+  type Reservation,
+  type SaleStatus,
+} from '@prisma/client';
 import { prisma } from '../../db';
 import { AppError } from '../../errors';
+import { emitOrderUpdated, emitReservationUpdated, emitSaleStock } from '../../realtime/socket';
 import { isSaleOpen } from '../reservations/service';
 import { charge, type MockOutcome } from './mockProvider';
 
@@ -17,6 +26,9 @@ type Db = Prisma.TransactionClient;
 export type PaymentResult = {
   order: Order;
   payment: Payment;
+  reservation: Reservation;
+  // Set only when the unit went back to the sale.
+  availableStock?: number;
   // false when an existing result was returned and nothing was written.
   changed: boolean;
 };
@@ -55,18 +67,28 @@ async function findExisting(
   userId: number,
   idempotencyKey: string,
 ): Promise<PaymentResult | null> {
-  const byKey = await db.payment.findUnique({ where: { idempotencyKey }, include: { order: true } });
+  const byKey = await db.payment.findUnique({
+    where: { idempotencyKey },
+    include: { order: { include: { reservation: true } } },
+  });
   if (byKey) {
-    const { order, ...payment } = byKey;
+    const {
+      order: { reservation, ...order },
+      ...payment
+    } = byKey;
     if (order.reservationId !== reservationId || order.userId !== userId) {
       throw new AppError(409, 'IDEMPOTENCY_KEY_REUSED', 'Idempotency-Key was already used for another payment');
     }
-    return { order, payment, changed: false };
+    return { order, payment, reservation, changed: false };
   }
 
-  const open = await db.order.findFirst({ where: { reservationId, status: { in: ['PAID', 'PENDING'] } } });
+  const open = await db.order.findFirst({
+    where: { reservationId, status: { in: ['PAID', 'PENDING'] } },
+    include: { reservation: true },
+  });
   if (open) {
-    return { order: open, payment: await latestPayment(db, open.id), changed: false };
+    const { reservation, ...order } = open;
+    return { order, payment: await latestPayment(db, order.id), reservation, changed: false };
   }
   return null;
 }
@@ -142,13 +164,14 @@ export async function checkout(
         data: { orderId: order.id, idempotencyKey, status: paymentStatus, createdAt: now },
       });
 
+      let updated = reservation;
       if (paymentStatus === 'SUCCESS') {
-        await tx.reservation.update({ where: { id: reservationId }, data: { status: 'COMPLETED' } });
+        updated = await tx.reservation.update({ where: { id: reservationId }, data: { status: 'COMPLETED' } });
         await insertOrderPaidEmail(tx, order);
       } else if (paymentStatus === 'PENDING') {
-        await tx.reservation.update({ where: { id: reservationId }, data: { status: 'PAYMENT_PENDING' } });
+        updated = await tx.reservation.update({ where: { id: reservationId }, data: { status: 'PAYMENT_PENDING' } });
       }
-      return { order, payment, changed: true };
+      return { order, payment, reservation: updated, changed: true };
     });
   } catch (err) {
     if (!isUniqueViolation(err)) throw err;
@@ -162,7 +185,15 @@ export async function checkout(
 }
 
 // Must only be called after the checkout transaction has committed.
-export async function afterCheckoutCommit(_result: PaymentResult): Promise<void> {}
+export async function afterCheckoutCommit(result: PaymentResult): Promise<void> {
+  emitPaymentEffects(result);
+}
+
+function emitPaymentEffects({ order, reservation, availableStock }: PaymentResult): void {
+  emitOrderUpdated(order.userId, { orderId: order.id, status: order.status });
+  emitReservationUpdated(reservation.userId, { reservationId: reservation.id, status: reservation.status });
+  if (availableStock !== undefined) emitSaleStock({ saleId: order.saleId, availableStock });
+}
 
 export async function resolvePayment(paymentId: number, status: 'SUCCESS' | 'FAILED'): Promise<PaymentResult> {
   const found = await prisma.payment.findUnique({
@@ -176,30 +207,37 @@ export async function resolvePayment(paymentId: number, status: 'SUCCESS' | 'FAI
   const result = await prisma.$transaction(async (tx) => {
     await lockSale(tx, found.order.saleId);
 
-    const { order: current, ...currentPayment } = await tx.payment.findUniqueOrThrow({
+    const {
+      order: { reservation: currentReservation, ...current },
+      ...currentPayment
+    } = await tx.payment.findUniqueOrThrow({
       where: { id: paymentId },
-      include: { order: true },
+      include: { order: { include: { reservation: true } } },
     });
     if (currentPayment.status !== 'PENDING') {
-      return { order: current, payment: currentPayment, changed: false };
+      return { order: current, payment: currentPayment, reservation: currentReservation, changed: false };
     }
 
     const payment = await tx.payment.update({ where: { id: paymentId }, data: { status } });
     const order = await tx.order.update({ where: { id: current.id }, data: { status: ORDER_STATUS[status] } });
     if (status === 'SUCCESS') {
-      await tx.reservation.update({ where: { id: order.reservationId }, data: { status: 'COMPLETED' } });
-      await insertOrderPaidEmail(tx, order);
-    } else {
       const reservation = await tx.reservation.update({
         where: { id: order.reservationId },
-        data: { status: 'CANCELLED' },
+        data: { status: 'COMPLETED' },
       });
-      await tx.sale.update({
-        where: { id: order.saleId },
-        data: { availableStock: { increment: reservation.quantity } },
-      });
+      await insertOrderPaidEmail(tx, order);
+      return { order, payment, reservation, changed: true };
     }
-    return { order, payment, changed: true };
+    const reservation = await tx.reservation.update({
+      where: { id: order.reservationId },
+      data: { status: 'CANCELLED' },
+    });
+    const sale = await tx.sale.update({
+      where: { id: order.saleId },
+      data: { availableStock: { increment: reservation.quantity } },
+      select: { availableStock: true },
+    });
+    return { order, payment, reservation, availableStock: sale.availableStock, changed: true };
   });
 
   if (result.changed) await afterResolveCommit(result);
@@ -207,4 +245,6 @@ export async function resolvePayment(paymentId: number, status: 'SUCCESS' | 'FAI
 }
 
 // Must only be called after the resolve transaction has committed.
-export async function afterResolveCommit(_result: PaymentResult): Promise<void> {}
+export async function afterResolveCommit(result: PaymentResult): Promise<void> {
+  emitPaymentEffects(result);
+}

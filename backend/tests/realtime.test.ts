@@ -13,6 +13,7 @@ import {
   connect,
   flushAll,
   join,
+  type JoinEvent,
   type RealtimeServer,
   startRealtimeServer,
 } from './helpers/realtime';
@@ -47,7 +48,7 @@ afterEach(() => {
   clients = [];
 });
 
-async function client(...rooms: Array<[event: 'sale:join' | 'user:join' | 'dashboard:join', payload?: unknown]>) {
+async function client(...rooms: Array<readonly [event: JoinEvent, payload?: unknown]>) {
   const c = await connect(rt.url);
   clients.push(c);
   for (const [event, payload] of rooms) await join(c, event, payload);

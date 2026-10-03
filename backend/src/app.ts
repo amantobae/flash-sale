@@ -4,6 +4,7 @@ import { AppError, errorHandler, notFoundHandler } from './errors';
 import { orderRoutes } from './modules/orders/routes';
 import { paymentRoutes } from './modules/payments/routes';
 import { reservationRoutes } from './modules/reservations/routes';
+import { saleRoutes } from './modules/sales/routes';
 import { userRoutes } from './modules/users/routes';
 
 export type AppOptions = {
@@ -24,6 +25,7 @@ export function createApp({ now = () => new Date() }: AppOptions = {}) {
   });
 
   app.use(userRoutes());
+  app.use(saleRoutes({ now }));
   app.use(reservationRoutes({ now }));
   app.use(paymentRoutes({ now }));
   app.use(orderRoutes());
