@@ -354,3 +354,46 @@ describe('POST /api/reservations/:id/checkout', () => {
     expect(outcome(res)).toBe('401 UNAUTHORIZED');
   });
 });
+
+describe('DELETE and checkout in parallel on the same ACTIVE reservation', () => {
+  it('ends either cancelled or paid, never both, no 500, over 10 rounds', async () => {
+    const ROUNDS = 10;
+    const sale = await createSale({ totalStock: ROUNDS, ...openWindow });
+    const users = await createUsers(ROUNDS);
+    const winners: string[] = [];
+
+    for (const user of users) {
+      const reservationId = await reserveFor(sale.id, user.id);
+
+      const [cancel, pay] = await Promise.all([
+        cancelRequest(server, reservationId, user.id),
+        checkoutRequest(server, reservationId, user.id, 'SUCCESS'),
+      ]);
+
+      const pair = [outcome(cancel), outcome(pay)];
+      const reservation = await getReservation(reservationId);
+      const orders = await prisma.order.findMany({ where: { reservationId } });
+      if (pair[0] === '200 OK') {
+        expect(pair).toEqual(['200 OK', '409 RESERVATION_NOT_ACTIVE']);
+        expect(reservation.status).toBe('CANCELLED');
+        expect(orders).toEqual([]);
+        winners.push('cancel');
+      } else {
+        expect(pair).toEqual(['409 RESERVATION_NOT_ACTIVE', '200 OK']);
+        expect(pay.body.order.status).toBe('PAID');
+        expect(reservation.status).toBe('COMPLETED');
+        expect(orders.map((o) => o.status)).toEqual(['PAID']);
+        winners.push('pay');
+      }
+      await assertStockInvariant(sale.id);
+    }
+
+    const counts = countBy(winners, (w) => w);
+    const paid = counts.pay ?? 0;
+    expect((counts.cancel ?? 0) + paid).toBe(ROUNDS);
+    expect(await prisma.payment.count({ where: { status: 'SUCCESS' } })).toBe(paid);
+    expect(await prisma.emailOutbox.count({ where: { type: 'ORDER_PAID' } })).toBe(paid);
+    expect((await getSale(sale.id)).availableStock).toBe(ROUNDS - paid);
+    await assertStockInvariant(sale.id);
+  });
+});
