@@ -94,3 +94,34 @@ Timestamps come from `date "+%Y-%m-%d %H:%M %z"` in the terminal. New entries ar
 - **Reason:** The requested commit order was compose, backend skeleton, schema+migration, frontend, tests. `/health` and the CHECK constraint were verified manually before the tests were added. From step 2 on, tests come first as the project rules require.
 - **Alternatives considered:** None.
 - **Known issues / not done:** `npm audit` in `backend/` reports 3 high-severity findings in `deepmerge-ts` pulled in by the Prisma CLI (dev dependency, only merges config); the suggested fix is a downgrade to Prisma 6.12 or a move to Prisma 8, neither done. The frontend page was checked over HTTP only (no browser screenshot). The backend image is single-stage and includes dev dependencies. No frontend tests. Reservations, payments, sockets, ticker, emails and seed data are intentionally not implemented.
+
+### 2026-10-03 22:07 +0600 · Step 2: reservations · Clock injected into `createApp`
+- **Decision:** `createApp({ now = () => new Date() })` takes a clock; routes call `now()` once per request and pass the value into `reserve(saleId, userId, now)`. Services never read the clock themselves.
+- **Reason:** Keeps the "time is a parameter" rule while letting HTTP tests pin the server time, so "exactly at `startsAt` while status is still SCHEDULED" and "exactly at `endsAt`" are tested through real Supertest requests.
+- **Alternatives considered:** Fake timers; calling the service directly for the time-window tests.
+
+### 2026-10-03 22:07 +0600 · Step 2: reservations · Prisma pool size for concurrency tests
+- **Decision:** `testDatabaseUrl()` appends `connection_limit=30&pool_timeout=20` unless the URL already sets them.
+- **Reason:** Each of the 20 parallel reserve requests holds an interactive transaction, and therefore a pooled connection, while it waits on the Sale row lock. Prisma's default pool (`cpus * 2 + 1`) plus the 2 s `maxWait` could produce `P2024` timeouts instead of the expected 409s. 30 stays well under Postgres' default `max_connections = 100`.
+- **Alternatives considered:** Raising `maxWait`/`timeout` on `$transaction`; fewer parallel requests.
+
+### 2026-10-03 22:07 +0600 · Step 2: reservations · Check order and error codes
+- **Decision:** Inside the transaction, after `SELECT ... FROM "Sale" WHERE id = $1 FOR UPDATE`: sale missing → 404 `SALE_NOT_FOUND`; sale condition (`status != ENDED AND startsAt <= now < endsAt`) → 409 `SALE_NOT_ACTIVE`; existing `ACTIVE`/`PAYMENT_PENDING` reservation → 409 `ALREADY_RESERVED`; `availableStock < 1` → 409 `SOLD_OUT`. Then `availableStock: { decrement: 1 }` and a Reservation with `expiresAt = now + 10 min`. Invalid `X-User-Id` or unknown user → 401 `UNAUTHORIZED`; invalid body or path param → 400 `VALIDATION_ERROR`.
+- **Reason:** `ALREADY_RESERVED` is checked before `SOLD_OUT` so a user who holds the last unit and clicks again gets the more accurate error. The decrement is a relative SQL update, so even without the lock the CHECK constraint stops overselling (it fails with 500 instead of 409, as the mutation check below shows).
+- **Alternatives considered:** Checking stock before the existing reservation; a partial unique index on active reservations per user and sale.
+
+### 2026-10-03 22:07 +0600 · Step 2: reservations · Post-commit hook and login stub
+- **Decision:** `reserve()` calls `afterReserveCommit(result)` only after `prisma.$transaction` resolves; it is empty for now and is where step 5 will emit `sale:stock`. `POST /api/users/login` uses `prisma.user.upsert` on the unique `username` (email `{username}@example.test`); `requireUser` loads the user from `X-User-Id` into `res.locals.user`.
+- **Reason:** One named place for side effects keeps socket emits out of the transaction. `upsert` keeps login a single query and idempotent.
+- **Alternatives considered:** Emitting inside the transaction callback; find-then-create in two queries for login.
+
+### 2026-10-03 22:07 +0600 · Step 2: reservations · Mutation check without `FOR UPDATE`
+- **Decision:** After the tests were green, `FOR UPDATE` was removed temporarily and test (a) (stock 1, 20 parallel users) was run 5 times. It failed in **5 of 5** runs: each run had 1 × 201 but 17–19 × 500 `INTERNAL_ERROR` instead of 19 × 409 `SOLD_OUT` (observed: 19, 17, 19, 18, 19 × 500). The 500s are Postgres `23514`, `Sale_available_stock_check` violations: without the lock every transaction read `available_stock = 1` and tried to decrement. The lock was restored, `git diff` was empty, and the broken version was never committed.
+- **Reason:** Proves the test actually detects a missing row lock; the CHECK constraint still prevented an oversell, confirming it works as the last line of defence.
+- **Alternatives considered:** None.
+
+### 2026-10-03 22:07 +0600 · Step 2: reservations · Process: red test commit
+- **Decision:** The tests were committed on their own before the implementation (all 16 new tests failing with 404 `NOT_FOUND`), followed by the implementation commit and this docs commit.
+- **Reason:** Explicitly requested commit order (tests, implementation, docs); it deviates from the "commit only when tests pass" rule for that one commit, but documents test-first in history.
+- **Alternatives considered:** Squashing tests and implementation into one commit.
+- **Known issues / not done:** No cart cancel, expiry, checkout, payments, sockets, ticker or emails (out of scope for step 2). `GET /api/reservations/me` is not implemented yet. ARCHITECTURE.md is unchanged: no deviations in this step.
