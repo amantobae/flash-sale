@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Server } from 'node:http';
 import request from 'supertest';
 
@@ -11,6 +12,31 @@ export function cancelRequest(target: Server, reservationId: number, userId: num
 
 export function currentCartRequest(target: Server, userId: number) {
   return request(target).get('/api/reservations/me').set('X-User-Id', String(userId));
+}
+
+export type CheckoutOutcome = 'SUCCESS' | 'FAILED' | 'PENDING';
+
+// key: undefined generates a fresh key, null sends no Idempotency-Key header.
+export function checkoutRequest(
+  target: Server,
+  reservationId: number,
+  userId: number,
+  outcome: CheckoutOutcome,
+  key: string | null = randomUUID(),
+) {
+  const req = request(target)
+    .post(`/api/reservations/${reservationId}/checkout`)
+    .set('X-User-Id', String(userId));
+  if (key !== null) req.set('Idempotency-Key', key);
+  return req.send({ outcome });
+}
+
+export function resolveRequest(target: Server, paymentId: number, status: 'SUCCESS' | 'FAILED') {
+  return request(target).post(`/api/payments/${paymentId}/resolve`).send({ status });
+}
+
+export function myOrdersRequest(target: Server, userId: number) {
+  return request(target).get('/api/orders/me').set('X-User-Id', String(userId));
 }
 
 export function countBy<T>(items: T[], key: (item: T) => string) {
