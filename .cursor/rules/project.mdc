@@ -1,0 +1,29 @@
+---
+description: Flash Sale project rules and working process
+alwaysApply: true
+---
+
+# Flash Sale: project rules
+
+## Scope
+- Always read @TASK.md and @ARCHITECTURE.md before working. Do not add functionality outside them.
+
+## Data and concurrency
+- Stock and sale status change ONLY inside `prisma.$transaction` after `SELECT ... FROM "Sale" WHERE id = $1 FOR UPDATE` on the Sale row. Never "read, then update" in two separate queries.
+- Money is stored in cents (integers).
+- Time is passed as a `now` parameter into service and ticker functions so tests can control it. Do not call `new Date()` / `Date.now()` inside business logic.
+
+## Tests
+- Write the test first, then the implementation.
+- Concurrency tests must use `Promise.all` with real parallel requests.
+- Do not skip failing tests (no `.skip`, `.only`, `.todo`, or commented-out tests to make a run green).
+
+## Working process
+- Work in small steps. After each step: run the tests, and only if they pass, update DECISIONS.md and make a git commit.
+- At the end of every step, append a DECISIONS.md entry for each non-obvious choice made during that step (library, schema change, deviation from ARCHITECTURE.md), and a "Known issues / not done" line if anything was skipped.
+- If you deviate from ARCHITECTURE.md, update ARCHITECTURE.md in the same commit and say so in the DECISIONS.md entry and in the commit message body.
+- Timestamps in DECISIONS.md and AI_LOG.md must come from the terminal command `date "+%Y-%m-%d %H:%M %Z"`. Never invent a time. In PowerShell `date` is an alias of `Get-Date`, so call Git's binary: `& "C:\Program Files\Git\usr\bin\date.exe" "+%Y-%m-%d %H:%M %Z"`.
+
+## Git
+- Do not rewrite git history (no `commit --amend`, `rebase`, `reset --hard`, or force push).
+- Commit messages use the format `type: short description`, where type is one of `feat`, `fix`, `test`, `docs`, `chore`.
