@@ -196,6 +196,23 @@ describe('POST /api/payments/:id/resolve', () => {
     await assertStockInvariant(sale.id);
   });
 
+  it('(j) the ORDER_PAID insert tolerates an existing row for the order: 200, still one row', async () => {
+    const sale = await createSale({ totalStock: 3, ...openWindow });
+    const user = await createUser();
+    const { reservationId, orderId, paymentId } = await pendingPayment(sale.id, user.id);
+    await prisma.emailOutbox.create({
+      data: { type: 'ORDER_PAID', userId: user.id, toEmail: user.email, orderId, payload: {} },
+    });
+
+    const res = await resolveRequest(server, paymentId, 'SUCCESS');
+
+    expect(outcome(res)).toBe('200 OK');
+    expect(res.body.order.status).toBe('PAID');
+    expect((await getReservation(reservationId)).status).toBe('COMPLETED');
+    expect(await prisma.emailOutbox.count({ where: { type: 'ORDER_PAID', orderId } })).toBe(1);
+    await assertStockInvariant(sale.id);
+  });
+
   it('a payment that is not PENDING is not changed by resolve', async () => {
     const sale = await createSale({ totalStock: 3, ...openWindow });
     const user = await createUser();

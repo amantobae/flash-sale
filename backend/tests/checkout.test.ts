@@ -112,6 +112,12 @@ describe('POST /api/reservations/:id/checkout', () => {
     expect(await prisma.payment.count()).toBe(1);
     expect(await prisma.emailOutbox.count({ where: { type: 'ORDER_PAID' } })).toBe(1);
     await assertStockInvariant(sale.id);
+
+    const freshKey = await checkoutRequest(server, reservationId, user.id, 'SUCCESS');
+    expect(outcome(freshKey)).toBe('200 OK');
+    expect(freshKey.body).toEqual(responses[0].body);
+    expect(await prisma.payment.count()).toBe(1);
+    await assertStockInvariant(sale.id);
   });
 
   it('(c) 10 parallel checkouts with DIFFERENT keys: one paid Order, one SUCCESS Payment, no 500', async () => {
