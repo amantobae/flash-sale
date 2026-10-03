@@ -16,6 +16,7 @@
   "dependencies": {
     "@prisma/client": "6.19.3",
     "express": "5.2.1",
+    "socket.io": "4.8.4",
     "zod": "4.6.5"
   },
   "devDependencies": {
@@ -23,6 +24,7 @@
     "@types/node": "20.19.43",
     "@types/supertest": "7.2.1",
     "prisma": "6.19.3",
+    "socket.io-client": "4.8.4",
     "supertest": "7.3.1",
     "tsx": "4.23.15",
     "typescript": "5.9.3",
