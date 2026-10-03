@@ -22,7 +22,7 @@ alwaysApply: true
 - Work in small steps. After each step: run the tests, and only if they pass, update DECISIONS.md and make a git commit.
 - At the end of every step, append a DECISIONS.md entry for each non-obvious choice made during that step (library, schema change, deviation from ARCHITECTURE.md), and a "Known issues / not done" line if anything was skipped.
 - If you deviate from ARCHITECTURE.md, update ARCHITECTURE.md in the same commit and say so in the DECISIONS.md entry and in the commit message body.
-- Timestamps in DECISIONS.md and AI_LOG.md must come from the terminal command `date "+%Y-%m-%d %H:%M %Z"`. Never invent a time. In PowerShell `date` is an alias of `Get-Date`, so call Git's binary: `& "C:\Program Files\Git\usr\bin\date.exe" "+%Y-%m-%d %H:%M %Z"`.
+- Timestamps in DECISIONS.md and AI_LOG.md must come from the terminal command `date "+%Y-%m-%d %H:%M %z"` (numeric offset like `+0600`, not a zone name). Never invent a time. In PowerShell `date` is an alias of `Get-Date`, so call Git's binary: `& "C:\Program Files\Git\usr\bin\date.exe" "+%Y-%m-%d %H:%M %z"`.
 
 ## Git
 - Do not rewrite git history (no `commit --amend`, `rebase`, `reset --hard`, or force push).
