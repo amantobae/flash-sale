@@ -240,6 +240,8 @@ flowchart LR
 
 4\. \*\*Отправка писем\*\* (раздел 6).
 
+Каждый шаг `runTick` обёрнут в свой `try/catch`: ошибка шага пишется в лог, следующие шаги этого тика всё равно выполняются.
+
 
 
 \*\*`PAYMENT\_PENDING` никогда не истекает.\*\* Ни 10-минутный таймер, ни завершение распродажи его не трогают: ticker выбирает только `status = ACTIVE`. Выйти из `PAYMENT\_PENDING` можно одним способом — через resolve платежа: SUCCESS переводит в `COMPLETED`, FAILED — в `CANCELLED` с возвратом единицы в `availableStock`. Если распродажа уже `ENDED`, вернувшаяся единица остаётся непроданной. Платёж, который так и не разрешился, держит товар бессрочно. Это осознанное решение, такие платежи видны на дашборде (раздел «Вне рамок»).
@@ -312,7 +314,9 @@ Checkout дополнительно сам проверяет `expiresAt > now`,
 
 \- Если ограничение уникальности всё-таки сработало (ошибка Prisma `P2002`), перечитываем запись и возвращаем существующий результат.
 
-\- `POST /api/payments/:id/resolve` с телом `{ status }` — мок-вебхук провайдера для PENDING. Меняет только платежи в статусе `PENDING`, повторный вызов ничего не делает. SUCCESS: Order `PAID`, Reservation `COMPLETED`, `EmailOutbox(ORDER\_PAID)`. FAILED: Order `FAILED`, Reservation `CANCELLED`, `availableStock += 1`.
+\- До блокировки резерв читается без блокировки только чтобы узнать `saleId` и владельца (как в отмене): нет резерва или он чужой → 404 `RESERVATION\_NOT\_FOUND`. Ключ, уже использованный другим пользователем или для другого резерва → 409 `IDEMPOTENCY\_KEY\_REUSED`. Порядок проверок резерва под блокировкой: `RESERVATION\_NOT\_ACTIVE` → `RESERVATION\_EXPIRED` → `SALE\_NOT\_ACTIVE`. Сумма = `priceCents` распродажи × `quantity`, клиент её не передаёт.
+
+\- `POST /api/payments/:id/resolve` с телом `{ status }` — мок-вебхук провайдера для PENDING. Меняет только платежи в статусе `PENDING` (под блокировкой Sale), повторный или параллельный вызов ничего не делает и возвращает текущее состояние с кодом 200. SUCCESS: Order `PAID`, Reservation `COMPLETED`, `EmailOutbox(ORDER\_PAID)`. FAILED: Order `FAILED`, Reservation `CANCELLED`, `availableStock += quantity`.
 
 
 
@@ -374,11 +378,11 @@ stateDiagram-v2
 
 \- `DELETE /api/reservations/:id` — отменить свой `ACTIVE`-резерв и вернуть товар (404 `RESERVATION\_NOT\_FOUND`, если резерва нет или он чужой; 409 `RESERVATION\_NOT\_ACTIVE` для любого другого статуса, включая `PAYMENT\_PENDING`).
 
-\- `POST /api/reservations/:id/checkout` — оплата (требует `Idempotency-Key`).
+\- `POST /api/reservations/:id/checkout` — оплата (требует `Idempotency-Key`, пустой или отсутствующий → 400). Ответ всегда 200 `{ order, payment }`, в том числе при повторе; 404 `RESERVATION\_NOT\_FOUND`, 409 `IDEMPOTENCY\_KEY\_REUSED`, `RESERVATION\_NOT\_ACTIVE`, `RESERVATION\_EXPIRED`, `SALE\_NOT\_ACTIVE`.
 
-\- `POST /api/payments/:id/resolve` — мок-вебхук.
+\- `POST /api/payments/:id/resolve` — мок-вебхук без авторизации, 200 `{ order, payment }`, 404 `PAYMENT\_NOT\_FOUND`.
 
-\- `GET /api/orders/me` — заказы пользователя.
+\- `GET /api/orders/me` — заказы пользователя от новых к старым: `{ orders: [{ id, saleId, reservationId, amountCents, status, paymentStatus, createdAt }] }`, где `paymentStatus` — статус последнего платежа.
 
 \- `GET /api/dashboard/sales/:id` — available/unsold, held, pending, sold, выручка, последние заказы, статистика outbox.
 
