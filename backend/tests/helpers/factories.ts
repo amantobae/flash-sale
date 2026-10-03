@@ -1,4 +1,4 @@
-import type { SaleStatus } from '@prisma/client';
+import type { ReservationStatus, SaleStatus } from '@prisma/client';
 import { prisma } from '../../src/db';
 
 let counter = 0;
@@ -40,5 +40,35 @@ export async function createSale(opts: {
       endsAt: opts.endsAt,
       status: opts.status ?? 'ACTIVE',
     },
+  });
+}
+
+const STOCK_HOLDING: ReservationStatus[] = ['ACTIVE', 'PAYMENT_PENDING', 'COMPLETED'];
+
+// Takes the unit out of availableStock for holding statuses, so the stock invariant still holds.
+export async function createReservation(opts: {
+  saleId: number;
+  userId: number;
+  status: ReservationStatus;
+  expiresAt: Date;
+  createdAt?: Date;
+}) {
+  return prisma.$transaction(async (tx) => {
+    if (STOCK_HOLDING.includes(opts.status)) {
+      await tx.sale.update({
+        where: { id: opts.saleId },
+        data: { availableStock: { decrement: 1 } },
+      });
+    }
+    return tx.reservation.create({
+      data: {
+        saleId: opts.saleId,
+        userId: opts.userId,
+        quantity: 1,
+        status: opts.status,
+        expiresAt: opts.expiresAt,
+        createdAt: opts.createdAt,
+      },
+    });
   });
 }

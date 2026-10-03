@@ -1,10 +1,10 @@
 import type { Server } from 'node:http';
-import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { prisma } from '../src/db';
 import { resetDb } from './helpers/db';
 import { createSale, createUser, createUsers } from './helpers/factories';
+import { countBy, outcome, reserveRequest as reserve } from './helpers/http';
 import { assertStockInvariant } from './helpers/invariant';
 import { close, listen } from './helpers/server';
 
@@ -31,18 +31,6 @@ afterAll(async () => {
 beforeEach(async () => {
   await resetDb();
 });
-
-function reserve(target: Server, saleId: number, userId: number) {
-  return request(target).post(`/api/sales/${saleId}/reservations`).set('X-User-Id', String(userId));
-}
-
-function countBy<T>(items: T[], key: (item: T) => string) {
-  const counts: Record<string, number> = {};
-  for (const item of items) counts[key(item)] = (counts[key(item)] ?? 0) + 1;
-  return counts;
-}
-
-const outcome = (res: request.Response) => `${res.status} ${res.body?.error?.code ?? 'OK'}`;
 
 describe('POST /api/sales/:id/reservations: concurrency', () => {
   it('stock 1, 20 users in parallel: exactly 1 success and 19 SOLD_OUT', async () => {
