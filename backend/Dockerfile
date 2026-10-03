@@ -12,7 +12,8 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+  PRISMA_HIDE_UPDATE_MESSAGE=1
 EXPOSE 3000
 
 CMD ["sh", "-c", "npx prisma migrate deploy && exec node dist/server.js"]
