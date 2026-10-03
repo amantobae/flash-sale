@@ -36,4 +36,6 @@ npm run dev --prefix backend     # http://localhost:3000
 npm run dev --prefix frontend    # http://localhost:5173, proxies /health to localhost:3000
 ```
 
+Demo data: `npm run seed --prefix backend` (locally, uses `backend/.env`) or `docker compose exec backend npx tsx prisma/seed.ts` creates one product and one sale (stock 10, starts in 1 minute, lasts 10 minutes). It does nothing if a sale that has not ended already exists. Override with `SEED_STOCK`, `SEED_STARTS_IN_SECONDS`, `SEED_DURATION_SECONDS`, `SEED_PRICE_CENTS`. Tests never run the seed.
+
 Root scripts: `npm run dev` (= `docker compose up --build`), `npm run build` (builds backend and frontend), `npm test`.
