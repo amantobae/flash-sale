@@ -1,8 +1,14 @@
 import express from 'express';
 import { prisma } from './db';
 import { AppError, errorHandler, notFoundHandler } from './errors';
+import { reservationRoutes } from './modules/reservations/routes';
+import { userRoutes } from './modules/users/routes';
 
-export function createApp() {
+export type AppOptions = {
+  now?: () => Date;
+};
+
+export function createApp({ now = () => new Date() }: AppOptions = {}) {
   const app = express();
   app.use(express.json());
 
@@ -14,6 +20,9 @@ export function createApp() {
     }
     res.json({ status: 'ok', db: 'ok' });
   });
+
+  app.use(userRoutes());
+  app.use(reservationRoutes({ now }));
 
   app.use(notFoundHandler);
   app.use(errorHandler);
