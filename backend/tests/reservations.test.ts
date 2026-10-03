@@ -61,16 +61,13 @@ describe('POST /api/sales/:id/reservations: concurrency', () => {
     await assertStockInvariant(sale.id);
   });
 
-  it('same user, 2 parallel requests on stock 10: exactly 1 reservation and 1 ALREADY_RESERVED', async () => {
+  it('same user, 10 parallel requests on stock 10: exactly 1 reservation and 9 ALREADY_RESERVED', async () => {
     const sale = await createSale({ totalStock: 10, ...openWindow });
     const user = await createUser();
 
-    const responses = await Promise.all([
-      reserve(server, sale.id, user.id),
-      reserve(server, sale.id, user.id),
-    ]);
+    const responses = await Promise.all(Array.from({ length: 10 }, () => reserve(server, sale.id, user.id)));
 
-    expect(countBy(responses, outcome)).toEqual({ '201 OK': 1, '409 ALREADY_RESERVED': 1 });
+    expect(countBy(responses, outcome)).toEqual({ '201 OK': 1, '409 ALREADY_RESERVED': 9 });
     const after = await prisma.sale.findUniqueOrThrow({ where: { id: sale.id } });
     expect(after.availableStock).toBe(9);
     expect(await prisma.reservation.count({ where: { saleId: sale.id, userId: user.id } })).toBe(1);

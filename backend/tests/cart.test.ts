@@ -147,6 +147,22 @@ describe('DELETE /api/reservations/:id', () => {
     await assertStockInvariant(sale.id);
   });
 
+  it('(b) 10 parallel cancels of the same reservation: one 200, nine 409, stock returned once', async () => {
+    const sale = await createSale({ totalStock: 3, ...openWindow });
+    const user = await createUser();
+    const reserved = await reserveRequest(server, sale.id, user.id);
+    const reservationId = reserved.body.reservation.id;
+    const before = await availableStock(sale.id);
+
+    const responses = await Promise.all(
+      Array.from({ length: 10 }, () => cancelRequest(server, reservationId, user.id)),
+    );
+
+    expect(countBy(responses, outcome)).toEqual({ '200 OK': 1, '409 RESERVATION_NOT_ACTIVE': 9 });
+    expect(await availableStock(sale.id)).toBe(before + 1);
+    await assertStockInvariant(sale.id);
+  });
+
   it('a repeated cancel returns 409 and does not return stock again', async () => {
     const sale = await createSale({ totalStock: 3, ...openWindow });
     const user = await createUser();
