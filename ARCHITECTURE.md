@@ -370,9 +370,9 @@ stateDiagram-v2
 
 \- `POST /api/sales/:id/reservations` — зарезервировать (409 при `SOLD\_OUT`, `SALE\_NOT\_ACTIVE`, `ALREADY\_RESERVED`).
 
-\- `GET /api/reservations/me` — текущая корзина.
+\- `GET /api/reservations/me` — текущая корзина: `{ reservation, serverTime }`, где `reservation` — резерв `ACTIVE` или `PAYMENT\_PENDING` пользователя либо `null`.
 
-\- `DELETE /api/reservations/:id` — отменить резерв и вернуть товар.
+\- `DELETE /api/reservations/:id` — отменить свой `ACTIVE`-резерв и вернуть товар (404 `RESERVATION\_NOT\_FOUND`, если резерва нет или он чужой; 409 `RESERVATION\_NOT\_ACTIVE` для любого другого статуса, включая `PAYMENT\_PENDING`).
 
 \- `POST /api/reservations/:id/checkout` — оплата (требует `Idempotency-Key`).
 

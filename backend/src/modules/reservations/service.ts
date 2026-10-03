@@ -66,6 +66,7 @@ export async function reserve(saleId: number, userId: number, now: Date): Promis
         quantity: 1,
         status: 'ACTIVE',
         expiresAt: new Date(now.getTime() + RESERVATION_HOLD_MS),
+        createdAt: now,
       },
     });
     return { reservation, availableStock: updated.availableStock };
@@ -77,3 +78,56 @@ export async function reserve(saleId: number, userId: number, now: Date): Promis
 
 // Must only be called after the reserve transaction has committed.
 export async function afterReserveCommit(_result: ReserveResult): Promise<void> {}
+
+export async function getCurrentReservation(userId: number): Promise<Reservation | null> {
+  return prisma.reservation.findFirst({
+    where: { userId, status: { in: ['ACTIVE', 'PAYMENT_PENDING'] } },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+export type CancelResult = {
+  reservation: Reservation;
+  availableStock: number;
+};
+
+export async function cancelReservation(reservationId: number, userId: number): Promise<CancelResult> {
+  const found = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    select: { saleId: true, userId: true },
+  });
+  if (!found || found.userId !== userId) {
+    throw new AppError(404, 'RESERVATION_NOT_FOUND', `Reservation ${reservationId} not found`);
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`
+      SELECT id
+      FROM "Sale"
+      WHERE id = ${found.saleId}
+      FOR UPDATE
+    `;
+
+    const reservation = await tx.reservation.findUniqueOrThrow({ where: { id: reservationId } });
+    if (reservation.status !== 'ACTIVE') {
+      throw new AppError(409, 'RESERVATION_NOT_ACTIVE', `Reservation is ${reservation.status}`);
+    }
+
+    const cancelled = await tx.reservation.update({
+      where: { id: reservationId },
+      data: { status: 'CANCELLED' },
+    });
+    const sale = await tx.sale.update({
+      where: { id: reservation.saleId },
+      data: { availableStock: { increment: reservation.quantity } },
+      select: { availableStock: true },
+    });
+    return { reservation: cancelled, availableStock: sale.availableStock };
+  });
+
+  await afterCancelCommit(result);
+  return result;
+}
+
+// Must only be called after the cancel transaction has committed.
+export async function afterCancelCommit(_result: CancelResult): Promise<void> {}
