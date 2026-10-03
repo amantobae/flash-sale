@@ -156,9 +156,14 @@ export async function expireReservations(now: Date): Promise<ExpireReservationsR
 export async function afterExpireReservationsCommit(_result: ExpireReservationsResult): Promise<void> {}
 
 export async function runTick(now: Date): Promise<void> {
-  await startSales(now);
-  await endSales(now);
-  await expireReservations(now);
+  const steps = [startSales, endSales, expireReservations];
+  for (const step of steps) {
+    try {
+      await step(now);
+    } catch (err) {
+      console.error(`Sale ticker step ${step.name} failed`, err);
+    }
+  }
 }
 
 export function startTicker({

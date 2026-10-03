@@ -1,5 +1,5 @@
 import type { Server } from 'node:http';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app';
 import { prisma } from '../src/db';
 import { endSales, expireReservations, runTick, startSales } from '../src/jobs/saleTicker';
@@ -315,5 +315,45 @@ describe('runTick', () => {
     expect((await getSale(toExpire.id)).availableStock).toBe(2);
 
     for (const sale of [toStart, toEnd, toExpire]) await assertStockInvariant(sale.id);
+  });
+
+  it('a failing step is logged and does not block the remaining steps', async () => {
+    const tickAt = at(HOLD_MS);
+    const toEnd = await createSale({ totalStock: 2, startsAt: at(-60 * MINUTE), endsAt: at(5 * MINUTE) });
+    const toExpire = await createSale({ totalStock: 2, ...openWindow });
+    const [u1, u2] = await createUsers(2);
+    const endCart = await createReservation({
+      saleId: toEnd.id,
+      userId: u1.id,
+      status: 'ACTIVE',
+      expiresAt: at(20 * MINUTE),
+    });
+    const expiring = await createReservation({
+      saleId: toExpire.id,
+      userId: u2.id,
+      status: 'ACTIVE',
+      expiresAt: tickAt,
+    });
+    const failure = new Error('startSales exploded');
+    const realFindMany = prisma.sale.findMany.bind(prisma.sale);
+    const findMany = vi
+      .spyOn(prisma.sale, 'findMany')
+      .mockImplementation(realFindMany as never)
+      .mockRejectedValueOnce(failure);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      await expect(runTick(tickAt)).resolves.toBeUndefined();
+      expect(consoleError).toHaveBeenCalledTimes(1);
+      expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('startSales'), failure);
+    } finally {
+      findMany.mockRestore();
+      consoleError.mockRestore();
+    }
+
+    expect((await getSale(toEnd.id)).status).toBe('ENDED');
+    expect((await getReservation(endCart.id)).status).toBe('EXPIRED');
+    expect((await getReservation(expiring.id)).status).toBe('EXPIRED');
+    for (const sale of [toEnd, toExpire]) await assertStockInvariant(sale.id);
   });
 });
