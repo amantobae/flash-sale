@@ -212,7 +212,7 @@ flowchart LR
 
 1\. Блокируем строку Sale.
 
-2\. Проверяем условие продажи, `availableStock >= 1` и что у пользователя нет резерва `ACTIVE`/`PAYMENT\_PENDING`.
+2\. Проверяем строго по порядку: распродажа не найдена → 404 `SALE\_NOT\_FOUND`; условие продажи → 409 `SALE\_NOT\_ACTIVE`; у пользователя уже есть резерв `ACTIVE`/`PAYMENT\_PENDING` → 409 `ALREADY\_RESERVED`; `availableStock < 1` → 409 `SOLD\_OUT`. `ALREADY\_RESERVED` идёт раньше `SOLD\_OUT`, чтобы пользователь, который сам держит последнюю единицу, получил точную ошибку, а не «закончилось».
 
 3\. `availableStock -= 1`, создаём Reservation с `expiresAt = now + 10 min`.
 

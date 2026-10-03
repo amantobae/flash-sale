@@ -125,3 +125,8 @@ Timestamps come from `date "+%Y-%m-%d %H:%M %z"` in the terminal. New entries ar
 - **Reason:** Explicitly requested commit order (tests, implementation, docs); it deviates from the "commit only when tests pass" rule for that one commit, but documents test-first in history.
 - **Alternatives considered:** Squashing tests and implementation into one commit.
 - **Known issues / not done:** No cart cancel, expiry, checkout, payments, sockets, ticker or emails (out of scope for step 2). `GET /api/reservations/me` is not implemented yet. ARCHITECTURE.md is unchanged: no deviations in this step.
+
+### 2026-10-03 22:17 +0600 · Step 3: housekeeping · ARCHITECTURE.md reserve check order
+- **Decision:** ARCHITECTURE.md section 4 (reserve, item 2) now lists the checks in the order the code runs them: sale not found → sale condition → `ALREADY_RESERVED` → `SOLD_OUT`, with the reason. Documentation fix only, the code is unchanged.
+- **Reason:** The old text listed stock before the existing-reservation check, which did not match `reserve()` from step 2.
+- **Alternatives considered:** None.
