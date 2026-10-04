@@ -3,11 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "install:all": "npm ci --prefix backend && npm ci --prefix frontend",
+    "install:all": "npm ci && npm ci --prefix backend && npm ci --prefix frontend",
     "dev": "docker compose up --build",
     "build": "npm run build --prefix backend && npm run build --prefix frontend",
     "test": "npm run test:backend && npm run test:frontend",
     "test:backend": "docker compose up -d --wait postgres-test && npm test --prefix backend",
-    "test:frontend": "npm test --prefix frontend"
+    "test:frontend": "npm test --prefix frontend",
+    "demo": "tsx scripts/demo.ts"
+  },
+  "devDependencies": {
+    "socket.io-client": "4.8.4",
+    "tsx": "4.23.15"
   }
 }
