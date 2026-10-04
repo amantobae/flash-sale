@@ -6,7 +6,13 @@ import { formatCents, formatCountdown } from '../lib/format';
 import { beginAttempt, finishAttempt } from '../lib/paymentAttempt';
 import type { PaymentStatus } from '../lib/types';
 
-type Message = { tone: 'ok' | 'error'; text: string };
+// A message with `reservationId` only makes sense while that cart is shown ("you can try again").
+type Message = { tone: 'ok' | 'error'; text: string; reservationId?: number };
+
+function MessageLine({ message, reservationId }: { message: Message | null; reservationId: number | null }) {
+  if (!message || (message.reservationId !== undefined && message.reservationId !== reservationId)) return null;
+  return <p style={{ color: message.tone === 'ok' ? 'green' : 'crimson' }}>{message.text}</p>;
+}
 
 export function Cart({ store }: { store: SaleStore }) {
   const { user, sale, offset, reservation, paymentAttempt, refetchSale, refetchCart, refetchOrders, setReservation } =
@@ -24,7 +30,7 @@ export function Cart({ store }: { store: SaleStore }) {
       <section>
         <h2>Cart</h2>
         <p>Your cart is empty.</p>
-        {message && <p style={{ color: message.tone === 'ok' ? 'green' : 'crimson' }}>{message.text}</p>}
+        <MessageLine message={message} reservationId={null} />
       </section>
     );
   }
@@ -41,7 +47,8 @@ export function Cart({ store }: { store: SaleStore }) {
     try {
       await action();
     } catch (err) {
-      setMessage({ tone: 'error', text: describeError(err) });
+      const networkError = err instanceof ApiError && err.status === 0;
+      setMessage({ tone: 'error', text: describeError(err), reservationId: networkError ? current.id : undefined });
       if (err instanceof ApiError && err.status === 409) await Promise.all([refetchCart(), refetchSale()]);
     } finally {
       inFlight.current = false;
@@ -61,7 +68,11 @@ export function Cart({ store }: { store: SaleStore }) {
         if (payment.status === 'PENDING')
           setMessage({ tone: 'ok', text: `Payment for order #${order.id} is pending. See Orders.` });
         if (payment.status === 'FAILED')
-          setMessage({ tone: 'error', text: 'Payment declined. The item is still yours until the timer ends; you can try again.' });
+          setMessage({
+            tone: 'error',
+            text: 'Payment declined. The item is still yours until the timer ends; you can try again.',
+            reservationId: current.id,
+          });
         await Promise.all([refetchCart(), refetchOrders()]);
       } catch (err) {
         paymentAttempt.current = finishAttempt(started, null);
@@ -115,7 +126,7 @@ export function Cart({ store }: { store: SaleStore }) {
         </>
       )}
 
-      {message && <p style={{ color: message.tone === 'ok' ? 'green' : 'crimson' }}>{message.text}</p>}
+      <MessageLine message={message} reservationId={current.id} />
     </section>
   );
 }
