@@ -1,34 +1,75 @@
 import { useEffect, useState } from 'react';
-import { getHealth, type Health } from './api/client';
+import { clearSession, loadSession, saveSession, setUnauthorizedHandler } from './api/client';
+import { Notifications } from './components/Notifications';
+import { useSale } from './hooks/useSale';
+import type { User } from './lib/types';
+import { Cart } from './pages/Cart';
+import { Login } from './pages/Login';
+import { Orders } from './pages/Orders';
+import { Storefront } from './pages/Storefront';
+import { disconnectSocket } from './socket';
 
-type State =
-  | { kind: 'loading' }
-  | { kind: 'ok'; health: Health }
-  | { kind: 'error'; message: string };
+type Page = 'storefront' | 'cart' | 'orders';
 
 export function App() {
-  const [state, setState] = useState<State>({ kind: 'loading' });
+  const [user, setUser] = useState<User | null>(loadSession);
 
   useEffect(() => {
-    getHealth()
-      .then((health) => setState({ kind: 'ok', health }))
-      .catch((err: Error) => setState({ kind: 'error', message: err.message }));
+    setUnauthorizedHandler(() => {
+      disconnectSocket();
+      setUser(null);
+    });
+    return () => setUnauthorizedHandler(null);
   }, []);
 
+  function logout() {
+    clearSession();
+    disconnectSocket();
+    setUser(null);
+  }
+
   return (
-    <main style={{ fontFamily: 'system-ui, sans-serif', padding: 24 }}>
+    <main style={{ fontFamily: 'system-ui, sans-serif', padding: 24, maxWidth: 900 }}>
       <h1>Flash Sale</h1>
-      {state.kind === 'loading' && <p>Checking backend…</p>}
-      {state.kind === 'ok' && (
-        <p data-testid="health">
-          Backend: <strong>{state.health.status}</strong>, database: <strong>{state.health.db}</strong>
-        </p>
-      )}
-      {state.kind === 'error' && (
-        <p data-testid="health" style={{ color: 'crimson' }}>
-          Backend unavailable: {state.message}
-        </p>
+      {user ? (
+        <Shop key={user.id} user={user} onLogout={logout} />
+      ) : (
+        <Login
+          onLogin={(next) => {
+            saveSession(next);
+            setUser(next);
+          }}
+        />
       )}
     </main>
+  );
+}
+
+function Shop({ user, onLogout }: { user: User; onLogout: () => void }) {
+  const store = useSale(user);
+  const [page, setPage] = useState<Page>('storefront');
+
+  const tab = (id: Page, label: string) => (
+    <button onClick={() => setPage(id)} disabled={page === id}>
+      {label}
+    </button>
+  );
+
+  return (
+    <>
+      <header style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 }}>
+        {tab('storefront', 'Storefront')}
+        {tab('cart', store.reservation ? 'Cart (1)' : 'Cart')}
+        {tab('orders', 'Orders')}
+        <span style={{ marginLeft: 'auto' }}>
+          {store.connected ? 'Live' : 'Reconnecting…'} · {user.username}
+        </span>
+        <button onClick={onLogout}>Log out</button>
+      </header>
+      {page === 'storefront' && <Storefront store={store} />}
+      {page === 'cart' && <Cart store={store} />}
+      {page === 'orders' && <Orders store={store} />}
+      <Notifications notices={store.notices} onDismiss={store.dismissNotice} />
+    </>
   );
 }

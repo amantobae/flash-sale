@@ -101,9 +101,6 @@ async function request<T>(path: string, { method = 'GET', body, idempotencyKey }
   return data as T;
 }
 
-export type Health = { status: string; db: string };
-export const getHealth = () => request<Health>('/health');
-
 export const api = {
   login: (username: string) => request<{ user: User }>('/api/users/login', { method: 'POST', body: { username } }),
   getCurrentSale: () => request<{ sale: Sale; serverTime: string }>('/api/sales/current'),
