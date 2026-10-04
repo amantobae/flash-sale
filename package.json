@@ -9,7 +9,8 @@
     "test": "npm run test:backend && npm run test:frontend",
     "test:backend": "docker compose up -d --wait postgres-test && npm test --prefix backend",
     "test:frontend": "npm test --prefix frontend",
-    "demo": "tsx scripts/demo.ts"
+    "demo": "tsx scripts/demo.ts",
+    "restart-check": "tsx scripts/restart-check.ts"
   },
   "devDependencies": {
     "socket.io-client": "4.8.4",
