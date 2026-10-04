@@ -1,4 +1,4 @@
-import type { Order, Payment, PaymentStatus, Reservation, Sale, User } from '../lib/types';
+import type { CreatedSale, DashboardSnapshot, Order, Payment, PaymentStatus, Reservation, Sale, User } from '../lib/types';
 
 export class ApiError extends Error {
   constructor(
@@ -99,6 +99,9 @@ export const api = {
       method: 'POST',
       body: { status },
     }),
+  getDashboard: (saleId: number) => request<DashboardSnapshot>(`/api/dashboard/sales/${saleId}`),
+  createSale: (body: { priceCents: number; totalStock: number; startsAt: string; endsAt: string }) =>
+    request<{ sale: CreatedSale }>('/api/dashboard/sales', { method: 'POST', body }),
 };
 
 const MESSAGES: Record<string, string> = {

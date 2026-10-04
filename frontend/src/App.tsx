@@ -4,12 +4,13 @@ import { Notifications } from './components/Notifications';
 import { useSale } from './hooks/useSale';
 import type { User } from './lib/types';
 import { Cart } from './pages/Cart';
+import { Dashboard } from './pages/Dashboard';
 import { Login } from './pages/Login';
 import { Orders } from './pages/Orders';
 import { Storefront } from './pages/Storefront';
 import { disconnectSocket } from './socket';
 
-type Page = 'storefront' | 'cart' | 'orders';
+type Page = 'storefront' | 'cart' | 'orders' | 'dashboard';
 
 export function App() {
   const [user, setUser] = useState<User | null>(loadSession);
@@ -61,6 +62,7 @@ function Shop({ user, onLogout }: { user: User; onLogout: () => void }) {
         {tab('storefront', 'Storefront')}
         {tab('cart', store.reservation ? 'Cart (1)' : 'Cart')}
         {tab('orders', 'Orders')}
+        {tab('dashboard', 'Dashboard')}
         <span style={{ marginLeft: 'auto' }}>
           {store.connected ? 'Live' : 'Reconnecting…'} · {user.username}
         </span>
@@ -69,6 +71,7 @@ function Shop({ user, onLogout }: { user: User; onLogout: () => void }) {
       {page === 'storefront' && <Storefront store={store} />}
       {page === 'cart' && <Cart store={store} />}
       {page === 'orders' && <Orders store={store} />}
+      {page === 'dashboard' && <Dashboard />}
       <Notifications notices={store.notices} onDismiss={store.dismissNotice} />
     </>
   );

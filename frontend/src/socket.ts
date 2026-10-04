@@ -16,9 +16,17 @@ export function disconnectSocket(): void {
   socket = null;
 }
 
-export async function joinRoom(target: Socket, event: 'sale:join' | 'user:join', payload: object): Promise<boolean> {
+export async function joinRoom(
+  target: Socket,
+  event: 'sale:join' | 'user:join' | 'dashboard:join',
+  payload?: object,
+): Promise<boolean> {
   try {
-    const ack = (await target.timeout(ACK_TIMEOUT_MS).emitWithAck(event, payload)) as { ok?: boolean } | undefined;
+    const ack = (
+      payload === undefined
+        ? await target.timeout(ACK_TIMEOUT_MS).emitWithAck(event)
+        : await target.timeout(ACK_TIMEOUT_MS).emitWithAck(event, payload)
+    ) as { ok?: boolean } | undefined;
     if (ack?.ok) return true;
     console.warn(`${event} rejected`, payload);
   } catch (err) {

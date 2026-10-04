@@ -106,7 +106,7 @@ flash-sale/
 
 &#x20;     components/ Notifications.tsx
 
-&#x20;     pages/ Login, Storefront, Cart, Orders, Dashboard (Dashboard comes in a later step)
+&#x20;     pages/ Login, Storefront, Cart, Orders, Dashboard
 
 ```
 
