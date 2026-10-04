@@ -22,7 +22,7 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
   }
 
   return (
-    <form onSubmit={submit} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+    <form onSubmit={submit} className="inline-form">
       <label>
         Username{' '}
         <input value={username} onChange={(e) => setUsername(e.target.value)} maxLength={50} autoFocus />
@@ -30,7 +30,7 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
       <button type="submit" disabled={busy || username.trim() === ''}>
         {busy ? 'Logging in…' : 'Log in'}
       </button>
-      {error && <span style={{ color: 'crimson' }}>{error}</span>}
+      {error && <span className="error">{error}</span>}
     </form>
   );
 }

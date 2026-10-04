@@ -131,7 +131,7 @@ export function Dashboard() {
         <input
           value={saleIdInput}
           onChange={(e) => setSaleIdInput(e.target.value)}
-          style={{ width: 80 }}
+          className="sale-id"
         />{' '}
         <button
           onClick={() => {
@@ -142,7 +142,7 @@ export function Dashboard() {
           Load
         </button>
       </p>
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+      {error && <p className="error">{error}</p>}
       {data && (
         <>
           <p>
@@ -152,16 +152,16 @@ export function Dashboard() {
           <p>
             {new Date(data.sale.startsAt).toLocaleString()} — {new Date(data.sale.endsAt).toLocaleString()}
           </p>
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', margin: '12px 0' }}>
+          <div className="stats">
             {stats.map((row) => (
-              <div key={row.label} style={{ minWidth: 120, padding: 12, border: '1px solid #ddd' }}>
-                <div style={{ fontSize: 12, color: '#666' }}>{row.label}</div>
-                <div style={{ fontSize: 24 }}>{row.value}</div>
+              <div key={row.label} className="stat">
+                <div className="stat-label">{row.label}</div>
+                <div className="stat-value">{row.value}</div>
               </div>
             ))}
-            <div style={{ minWidth: 120, padding: 12, border: '1px solid #ddd' }}>
-              <div style={{ fontSize: 12, color: '#666' }}>Revenue</div>
-              <div style={{ fontSize: 24 }}>{formatCents(data.revenueCents)}</div>
+            <div className="stat">
+              <div className="stat-label">Revenue</div>
+              <div className="stat-value">{formatCents(data.revenueCents)}</div>
             </div>
           </div>
           <h3>Outbox</h3>
@@ -174,9 +174,9 @@ export function Dashboard() {
           {data.recentOrders.length === 0 ? (
             <p>No orders yet.</p>
           ) : (
-            <table cellPadding={6} style={{ borderCollapse: 'collapse' }}>
+            <table className="data">
               <thead>
-                <tr style={{ textAlign: 'left' }}>
+                <tr>
                   <th>Order</th>
                   <th>User</th>
                   <th>Status</th>
@@ -186,10 +186,12 @@ export function Dashboard() {
               </thead>
               <tbody>
                 {data.recentOrders.map((order) => (
-                  <tr key={order.id} style={{ borderTop: '1px solid #ddd' }}>
+                  <tr key={order.id}>
                     <td>#{order.id}</td>
                     <td>{order.username}</td>
-                    <td>{order.status}</td>
+                    <td>
+                      <span className={`badge badge-${order.status}`}>{order.status}</span>
+                    </td>
                     <td>{formatCents(order.amountCents)}</td>
                     <td>{new Date(order.createdAt).toLocaleString()}</td>
                   </tr>
@@ -201,7 +203,7 @@ export function Dashboard() {
       )}
 
       <h3>Create next sale</h3>
-      <form onSubmit={createNext} style={{ display: 'grid', gap: 8, maxWidth: 360 }}>
+      <form onSubmit={createNext} className="sale-form">
         <label>
           Price (USD){' '}
           <input value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
@@ -229,7 +231,7 @@ export function Dashboard() {
         <button type="submit" disabled={creating}>
           {creating ? 'Creating…' : 'Create sale'}
         </button>
-        {formError && <div style={{ color: 'crimson' }}>{formError}</div>}
+        {formError && <div className="error">{formError}</div>}
       </form>
       {saleId === null && !data && !error && <p>Loading dashboard…</p>}
     </section>

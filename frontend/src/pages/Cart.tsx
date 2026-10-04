@@ -11,7 +11,7 @@ type Message = { tone: 'ok' | 'error'; text: string; reservationId?: number };
 
 function MessageLine({ message, reservationId }: { message: Message | null; reservationId: number | null }) {
   if (!message || (message.reservationId !== undefined && message.reservationId !== reservationId)) return null;
-  return <p style={{ color: message.tone === 'ok' ? 'green' : 'crimson' }}>{message.text}</p>;
+  return <p className={message.tone === 'ok' ? 'ok' : 'error'}>{message.text}</p>;
 }
 
 export function Cart({ store }: { store: SaleStore }) {
@@ -99,8 +99,8 @@ export function Cart({ store }: { store: SaleStore }) {
 
       {current.status === 'ACTIVE' && (
         <>
-          <p data-testid="cart-timer">Held for you: {timer ? formatCountdown(timer) : '…'}</p>
-          <fieldset style={{ maxWidth: 420 }}>
+          <p className="timer" data-testid="cart-timer">Held for you: {timer ? formatCountdown(timer) : '…'}</p>
+          <fieldset className="panel">
             <legend>Demo: mock payment outcome</legend>
             <select value={outcome} onChange={(e) => setOutcome(e.target.value as PaymentStatus)} disabled={busy !== null}>
               <option value="SUCCESS">SUCCESS (approve)</option>
@@ -108,7 +108,7 @@ export function Cart({ store }: { store: SaleStore }) {
               <option value="PENDING">PENDING (provider hangs)</option>
             </select>
           </fieldset>
-          <p style={{ display: 'flex', gap: 8 }}>
+          <p className="actions">
             <button onClick={pay} disabled={busy !== null || timer?.done === true}>
               {busy === 'pay' ? 'Paying…' : retrying ? 'Pay (retry same attempt)' : 'Pay'}
             </button>
@@ -117,7 +117,7 @@ export function Cart({ store }: { store: SaleStore }) {
             </button>
           </p>
           {retrying && (
-            <p style={{ fontSize: 12, color: '#666' }}>
+            <p className="muted">
               Idempotency-Key {attempt.key.slice(0, 8)}… is reused until this attempt ends with a declined payment.
             </p>
           )}

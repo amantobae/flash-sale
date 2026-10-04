@@ -2,9 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, describeError } from '../api/client';
 import type { SaleStore } from '../hooks/useSale';
 import { formatCents } from '../lib/format';
-import type { Order, OrderStatus } from '../lib/types';
-
-const BADGE: Record<OrderStatus, string> = { PENDING: '#b58900', PAID: '#2e7d32', FAILED: '#c62828' };
+import type { Order } from '../lib/types';
 
 export function Orders({ store }: { store: SaleStore }) {
   const { orders, refetchOrders } = store;
@@ -18,9 +16,9 @@ export function Orders({ store }: { store: SaleStore }) {
   return (
     <section>
       <h2>Orders</h2>
-      <table cellPadding={6} style={{ borderCollapse: 'collapse' }}>
+      <table className="data">
         <thead>
-          <tr style={{ textAlign: 'left' }}>
+          <tr>
             <th>Order</th>
             <th>Amount</th>
             <th>Status</th>
@@ -31,14 +29,11 @@ export function Orders({ store }: { store: SaleStore }) {
         </thead>
         <tbody>
           {orders.map((order) => (
-            <tr key={order.id} style={{ borderTop: '1px solid #ddd' }}>
+            <tr key={order.id}>
               <td>#{order.id}</td>
               <td>{formatCents(order.amountCents)}</td>
               <td>
-                <span
-                  data-testid={`order-status-${order.id}`}
-                  style={{ background: BADGE[order.status], color: 'white', padding: '2px 6px', borderRadius: 4 }}
-                >
+                <span data-testid={`order-status-${order.id}`} className={`badge badge-${order.status}`}>
                   {order.status}
                 </span>
               </td>
@@ -73,9 +68,9 @@ function ResolveDemo({ order, store }: { order: Order; store: SaleStore }) {
   }
 
   return (
-    <fieldset style={{ border: '1px dashed #999' }}>
+    <fieldset className="panel panel-dashed">
       <legend>Demo: simulate provider webhook</legend>
-      <span style={{ display: 'flex', gap: 6 }}>
+      <span className="actions">
         <button onClick={() => resolve('SUCCESS')} disabled={busy || paymentId === null}>
           Resolve SUCCESS
         </button>
@@ -83,7 +78,7 @@ function ResolveDemo({ order, store }: { order: Order; store: SaleStore }) {
           Resolve FAILED
         </button>
       </span>
-      {error && <div style={{ color: 'crimson' }}>{error}</div>}
+      {error && <div className="error">{error}</div>}
     </fieldset>
   );
 }

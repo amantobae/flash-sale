@@ -30,7 +30,7 @@ export function App() {
   }
 
   return (
-    <main style={{ fontFamily: 'system-ui, sans-serif', padding: 24, maxWidth: 900 }}>
+    <main>
       <h1>Flash Sale</h1>
       {user ? (
         <Shop key={user.id} user={user} onLogout={logout} />
@@ -58,12 +58,12 @@ function Shop({ user, onLogout }: { user: User; onLogout: () => void }) {
 
   return (
     <>
-      <header style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 }}>
+      <header className="nav">
         {tab('storefront', 'Storefront')}
         {tab('cart', store.reservation ? 'Cart (1)' : 'Cart')}
         {tab('orders', 'Orders')}
         {tab('dashboard', 'Dashboard')}
-        <span style={{ marginLeft: 'auto' }}>
+        <span className="nav-status">
           {store.connected ? 'Live' : 'Reconnecting…'} · {user.username}
         </span>
         <button onClick={onLogout}>Log out</button>

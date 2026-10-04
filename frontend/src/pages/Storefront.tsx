@@ -41,9 +41,9 @@ export function Storefront({ store }: { store: SaleStore }) {
   }
 
   return (
-    <section>
+    <section className="card">
       <h2>{sale.product.name}</h2>
-      {sale.product.imageUrl && <img src={sale.product.imageUrl} alt="" style={{ maxWidth: 240, display: 'block' }} />}
+      {sale.product.imageUrl && <img src={sale.product.imageUrl} alt="" className="product-image" />}
       <p>{sale.product.description}</p>
       <p>
         Price: <strong data-testid="price">{formatCents(sale.priceCents)}</strong>
@@ -51,7 +51,7 @@ export function Storefront({ store }: { store: SaleStore }) {
       <p>
         In stock: <strong data-testid="stock">{sale.availableStock}</strong>
       </p>
-      <p data-testid="timer">
+      <p className="timer" data-testid="timer">
         {ui === 'SCHEDULED' && timer && <>Starts in {formatCountdown(timer)}</>}
         {ui === 'OPEN' && timer && <>Ends in {formatCountdown(timer)}</>}
         {ui === 'ENDED' && <>Sale ended</>}
@@ -59,8 +59,8 @@ export function Storefront({ store }: { store: SaleStore }) {
       <button onClick={addToCart} disabled={!canAdd}>
         {busy ? 'Adding…' : soldOut && ui !== 'ENDED' ? 'Sold out' : 'Add to cart'}
       </button>
-      {reservation && <span style={{ marginLeft: 8 }}>The item is in your cart.</span>}
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+      {reservation && <span className="hint">The item is in your cart.</span>}
+      {error && <p className="error">{error}</p>}
     </section>
   );
 }
