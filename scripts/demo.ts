@@ -497,6 +497,7 @@ async function dashboardInvariant(): Promise<string> {
   const paidReservation = await expectReserve(sale.id, paidUser.id);
   const paidCheckout = await checkout(paidReservation.id, paidUser.id, 'SUCCESS', randomUUID());
   assert(paidCheckout.status === 200, explain(paidCheckout));
+  const paid = readPayment(paidCheckout.body);
 
   const pendingReservation = await expectReserve(sale.id, pendingUser.id);
   const pendingCheckout = await checkout(pendingReservation.id, pendingUser.id, 'PENDING', randomUUID());
@@ -514,18 +515,18 @@ async function dashboardInvariant(): Promise<string> {
   const paidFromOrders = dashboard.recentOrders
     .filter((order) => order.status === 'PAID')
     .reduce((total, order) => total + order.amountCents, 0);
-  const paidFromAccount = (await myOrders(paidUser.id))
-    .filter((order) => order.status === 'PAID')
-    .reduce((total, order) => total + order.amountCents, 0);
+  // orders/me is the user's whole history, so only the order created on this sale counts.
+  const thisPaid = (await myOrders(paidUser.id)).filter((order) => order.id === paid.orderId);
+  assert(thisPaid.length === 1 && thisPaid[0].status === 'PAID', `orders/me missing order ${paid.orderId}`);
   assert(sum === dashboard.sale.totalStock, `available+held+pending+sold ${sum} != total ${dashboard.sale.totalStock}`);
   assert(dashboard.revenueCents === paidFromOrders, `revenueCents ${dashboard.revenueCents} != recentOrders PAID sum ${paidFromOrders}`);
-  assert(dashboard.revenueCents === paidFromAccount, `revenueCents ${dashboard.revenueCents} != orders/me PAID sum ${paidFromAccount}`);
+  assert(dashboard.revenueCents === thisPaid[0].amountCents, `revenueCents ${dashboard.revenueCents} != order ${paid.orderId} amount ${thisPaid[0].amountCents}`);
   assert(dashboard.revenueCents === PRICE_CENTS, `expected revenue ${PRICE_CENTS}, got ${dashboard.revenueCents} (FAILED must not count)`);
 
   return [
     `sale ${sale.id} total ${dashboard.sale.totalStock}`,
     `available ${dashboard.availableStock} + held ${dashboard.held} + pending ${dashboard.pending} + sold ${dashboard.sold} = ${sum}`,
-    `revenueCents ${dashboard.revenueCents}; PAID recentOrders ${paidFromOrders}; PAID orders/me ${paidFromAccount}`,
+    `revenueCents ${dashboard.revenueCents}; PAID recentOrders ${paidFromOrders}; order ${paid.orderId} amount ${thisPaid[0].amountCents}`,
     `recentOrders: ${dashboard.recentOrders.map((order) => `#${order.id} ${order.username} ${order.status} ${order.amountCents}`).join('; ')}`,
   ].join('\n');
 }
