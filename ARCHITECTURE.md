@@ -102,7 +102,11 @@ flash-sale/
 
 &#x20;     hooks/ useSale.ts, useCountdown.ts, useSocketEvent.ts
 
-&#x20;     pages/ Storefront, Cart, Orders, Dashboard
+&#x20;     lib/   pure logic with Vitest tests: time (clock offset, countdown), saleState (saleUiState, socket reducers), paymentAttempt (Idempotency-Key), format, notices
+
+&#x20;     components/ Notifications.tsx
+
+&#x20;     pages/ Login, Storefront, Cart, Orders, Dashboard (Dashboard comes in a later step)
 
 ```
 
@@ -417,6 +421,8 @@ stateDiagram-v2
 
 
 События дополняют REST, а не заменяют его: при reconnect и при достижении нуля локальным таймером клиент перезапрашивает состояние.
+
+Клиент (шаг 5b): один сокет на вкладку. На каждый `connect` (первый и после reconnect) клиент сначала входит в `sale:{id}` и `user:{id}` и ждёт ack, затем перезапрашивает `GET /api/sales/current`, `GET /api/reservations/me` и `GET /api/orders/me`. Пользователь хранится в `sessionStorage`, поэтому две вкладки могут быть двумя разными пользователями. `GET /api/orders/me` не отдаёт id платежа, поэтому для demo-кнопок resolve клиент запоминает `payment.id` из ответа checkout `PENDING` в `sessionStorage` той вкладки, которая начала оплату. Новая распродажа, созданная seed-ом, в открытые вкладки не приходит (событий о новых распродажах нет), её видно после перезагрузки.
 
 
 
