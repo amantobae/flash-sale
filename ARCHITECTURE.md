@@ -388,9 +388,9 @@ stateDiagram-v2
 
 \- `GET /api/orders/me` — заказы пользователя от новых к старым: `{ orders: [{ id, saleId, reservationId, amountCents, status, paymentStatus, paymentId, createdAt }] }`, где `paymentStatus` и `paymentId` — статус и id последнего платежа (`paymentId` нужен demo-кнопкам resolve).
 
-\- `GET /api/dashboard/sales/:id` — available/unsold, held, pending, sold, выручка, последние заказы, статистика outbox.
+\- `GET /api/dashboard/sales/:id` — без авторизации. `{ sale: { id, status, priceCents, totalStock, availableStock, startsAt, endsAt, productName }, availableStock, unsold, held, pending, sold, revenueCents, recentOrders, outbox: { pending, sent, failed }, serverTime }`. `held` — резервы `ACTIVE`, `pending` — `PAYMENT_PENDING`, `sold` — `COMPLETED`, `revenueCents` — сумма `PAID`-заказов, `recentOrders` — последние 20 (`id`, `username`, `status`, `amountCents`, `createdAt`). `unsold` равен `availableStock` только при `ENDED`, иначе `null`. Счётчик outbox `pending` включает `PENDING` и `SENDING`. Агрегаты считаются SQL, без загрузки всех строк. Нет распродажи → 404 `SALE_NOT_FOUND`.
 
-\- `POST /api/dashboard/sales` / `PUT /api/dashboard/sales/:id` — создать или настроить распродажу (цена, сток, время).
+\- `POST /api/dashboard/sales` / `PUT /api/dashboard/sales/:id` — без авторизации. Тело `{ priceCents, totalStock, startsAt, endsAt, productId? }`; zod: `priceCents >= 1`, `totalStock >= 1`, `endsAt > startsAt` (иначе 400). POST создаёт `SCHEDULED` с `availableStock = totalStock`; без `productId` берётся продукт последней распродажи, если продукта нет → 404 `PRODUCT_NOT_FOUND`. PUT только для `SCHEDULED` с `startsAt > now` (иначе 409 `SALE_NOT_EDITABLE`), сток становится `availableStock = totalStock`. Смена времени после коммита шлёт `sale:status`; смена стока — `sale:stock`; всегда `dashboard:changed`.
 
 \- Единый формат ошибок: `{ error: { code, message } }`.
 
@@ -416,7 +416,9 @@ stateDiagram-v2
 
 \- `reservation:updated { reservationId, status }` → `user:{id}` владельца (отмена, истечение, очистка при завершении, а также смена статуса при checkout и resolve: `COMPLETED`, `PAYMENT\_PENDING`, `CANCELLED`, или `ACTIVE` после checkout FAILED);
 
-\- `order:updated { orderId, status }` → `user:{id}`, `dashboard` (checkout и resolve).
+\- `order:updated { orderId, status }` → `user:{id}`, `dashboard` (checkout и resolve);
+
+\- `dashboard:changed { saleId }` → `dashboard` (резерв, отмена, истечение, старт, завершение, checkout, resolve, create/update распродажи, успешная отправка писем). Дашборд по событию перезапрашивает агрегаты, не чаще 1 раза в секунду.
 
 
 

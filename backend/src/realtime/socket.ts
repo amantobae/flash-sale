@@ -84,3 +84,7 @@ export function emitReservationUpdated(
 export function emitOrderUpdated(userId: number, payload: { orderId: number; status: OrderStatus }): void {
   io?.to([userRoom(userId), DASHBOARD_ROOM]).emit('order:updated', payload);
 }
+
+export function emitDashboardChanged(payload: { saleId: number }): void {
+  io?.to(DASHBOARD_ROOM).emit('dashboard:changed', payload);
+}

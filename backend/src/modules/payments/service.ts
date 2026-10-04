@@ -9,7 +9,7 @@ import {
 } from '@prisma/client';
 import { prisma } from '../../db';
 import { AppError } from '../../errors';
-import { emitOrderUpdated, emitReservationUpdated, emitSaleStock } from '../../realtime/socket';
+import { emitDashboardChanged, emitOrderUpdated, emitReservationUpdated, emitSaleStock } from '../../realtime/socket';
 import { isSaleOpen } from '../reservations/service';
 import { charge, type MockOutcome } from './mockProvider';
 
@@ -193,6 +193,7 @@ function emitPaymentEffects({ order, reservation, availableStock }: PaymentResul
   emitOrderUpdated(order.userId, { orderId: order.id, status: order.status });
   emitReservationUpdated(reservation.userId, { reservationId: reservation.id, status: reservation.status });
   if (availableStock !== undefined) emitSaleStock({ saleId: order.saleId, availableStock });
+  emitDashboardChanged({ saleId: order.saleId });
 }
 
 export async function resolvePayment(paymentId: number, status: 'SUCCESS' | 'FAILED'): Promise<PaymentResult> {

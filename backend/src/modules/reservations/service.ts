@@ -1,7 +1,7 @@
 import type { Reservation, SaleStatus } from '@prisma/client';
 import { prisma } from '../../db';
 import { AppError } from '../../errors';
-import { emitReservationUpdated, emitSaleStock } from '../../realtime/socket';
+import { emitDashboardChanged, emitReservationUpdated, emitSaleStock } from '../../realtime/socket';
 
 export const RESERVATION_HOLD_MS = 10 * 60 * 1000;
 
@@ -80,6 +80,7 @@ export async function reserve(saleId: number, userId: number, now: Date): Promis
 // Must only be called after the reserve transaction has committed.
 export async function afterReserveCommit({ reservation, availableStock }: ReserveResult): Promise<void> {
   emitSaleStock({ saleId: reservation.saleId, availableStock });
+  emitDashboardChanged({ saleId: reservation.saleId });
 }
 
 export async function getCurrentReservation(userId: number): Promise<Reservation | null> {
@@ -136,4 +137,5 @@ export async function cancelReservation(reservationId: number, userId: number): 
 export async function afterCancelCommit({ reservation, availableStock }: CancelResult): Promise<void> {
   emitSaleStock({ saleId: reservation.saleId, availableStock });
   emitReservationUpdated(reservation.userId, { reservationId: reservation.id, status: reservation.status });
+  emitDashboardChanged({ saleId: reservation.saleId });
 }

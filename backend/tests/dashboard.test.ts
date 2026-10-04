@@ -256,7 +256,11 @@ describe('dashboard realtime on configure', () => {
     const res = await updateSaleRequest(
       rt.server,
       sale.id,
-      saleBody({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() }),
+      saleBody({
+        totalStock: 5,
+        startsAt: startsAt.toISOString(),
+        endsAt: endsAt.toISOString(),
+      }),
     );
     expect(outcome(res)).toBe('200 OK');
 

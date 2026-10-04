@@ -1,6 +1,7 @@
 import type { Prisma, Reservation, SaleStatus } from '@prisma/client';
 import { prisma } from '../db';
-import { emitReservationUpdated, emitSaleStatus, emitSaleStock } from '../realtime/socket';
+import { dispatchEmails } from '../modules/emails/dispatcher';
+import { emitDashboardChanged, emitReservationUpdated, emitSaleStatus, emitSaleStock } from '../realtime/socket';
 
 type LockedSale = {
   id: number;
@@ -58,6 +59,7 @@ export async function startSales(now: Date): Promise<StartSaleResult[]> {
 // Must only be called after the start-sale transaction has committed.
 export async function afterStartSaleCommit(result: StartSaleResult): Promise<void> {
   emitSaleStatus(result);
+  emitDashboardChanged({ saleId: result.saleId });
 }
 
 export type EndSaleResult = {
@@ -128,6 +130,7 @@ export async function afterEndSaleCommit(result: EndSaleResult): Promise<void> {
   for (const r of result.clearedReservations) {
     emitReservationUpdated(r.userId, { reservationId: r.id, status: r.status });
   }
+  emitDashboardChanged({ saleId: result.saleId });
 }
 
 export type ExpireReservationsResult = {
@@ -178,10 +181,11 @@ export async function afterExpireReservationsCommit(result: ExpireReservationsRe
   for (const r of result.expiredReservations) {
     emitReservationUpdated(r.userId, { reservationId: r.id, status: r.status });
   }
+  emitDashboardChanged({ saleId: result.saleId });
 }
 
 export async function runTick(now: Date): Promise<void> {
-  const steps = [startSales, endSales, expireReservations];
+  const steps = [startSales, endSales, expireReservations, dispatchEmails];
   for (const step of steps) {
     try {
       await step(now);

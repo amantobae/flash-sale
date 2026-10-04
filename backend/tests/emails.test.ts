@@ -37,10 +37,12 @@ beforeEach(async () => {
   await resetDb();
   resetSent();
   vi.spyOn(console, 'log').mockImplementation(() => {});
+  vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
 afterEach(() => {
-  vi.restoreAllMocks();
+  vi.mocked(console.log).mockRestore();
+  vi.mocked(console.error).mockRestore();
 });
 
 async function reserveFor(saleId: number, userId: number): Promise<number> {
@@ -106,23 +108,25 @@ describe('dispatchEmails', () => {
     const user = await createUser();
     await buy(sale.id, user.id);
     const send = vi.spyOn(mockMailer, 'send').mockRejectedValue(new Error('SMTP down'));
-    vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    expect(await dispatchEmails(at(MINUTE))).toEqual({ sent: 0, retried: 1, failed: 0 });
-    expect(await outboxRows()).toMatchObject([{ status: 'PENDING', attempts: 1, sentAt: null }]);
-    expect((await outboxRows())[0].lastError).toContain('SMTP down');
+    try {
+      expect(await dispatchEmails(at(MINUTE))).toEqual({ sent: 0, retried: 1, failed: 0 });
+      expect(await outboxRows()).toMatchObject([{ status: 'PENDING', attempts: 1, sentAt: null }]);
+      expect((await outboxRows())[0].lastError).toContain('SMTP down');
 
-    expect(await dispatchEmails(at(2 * MINUTE))).toEqual({ sent: 0, retried: 1, failed: 0 });
-    expect(await outboxRows()).toMatchObject([{ status: 'PENDING', attempts: 2 }]);
+      expect(await dispatchEmails(at(2 * MINUTE))).toEqual({ sent: 0, retried: 1, failed: 0 });
+      expect(await outboxRows()).toMatchObject([{ status: 'PENDING', attempts: 2 }]);
 
-    expect(await dispatchEmails(at(3 * MINUTE))).toEqual({ sent: 0, retried: 0, failed: 1 });
-    expect(await outboxRows()).toMatchObject([{ status: 'FAILED', attempts: 3, sentAt: null }]);
-    expect(send).toHaveBeenCalledTimes(3);
+      expect(await dispatchEmails(at(3 * MINUTE))).toEqual({ sent: 0, retried: 0, failed: 1 });
+      expect(await outboxRows()).toMatchObject([{ status: 'FAILED', attempts: 3, sentAt: null }]);
+      expect(send).toHaveBeenCalledTimes(3);
 
-    expect(await dispatchEmails(at(4 * MINUTE))).toEqual({ sent: 0, retried: 0, failed: 0 });
-    expect(send).toHaveBeenCalledTimes(3);
+      expect(await dispatchEmails(at(4 * MINUTE))).toEqual({ sent: 0, retried: 0, failed: 0 });
+      expect(send).toHaveBeenCalledTimes(3);
+    } finally {
+      send.mockRestore();
+    }
 
-    send.mockRestore();
     expect(await dispatchEmails(at(5 * MINUTE))).toEqual({ sent: 0, retried: 0, failed: 0 });
     expect(sent).toEqual([]);
     expect(await outboxRows()).toMatchObject([{ status: 'FAILED', attempts: 3, lastError: expect.stringContaining('SMTP down') }]);
@@ -133,7 +137,6 @@ describe('dispatchEmails', () => {
     const user = await createUser();
     await buy(sale.id, user.id);
     vi.spyOn(mockMailer, 'send').mockRejectedValueOnce(new Error('timeout'));
-    vi.spyOn(console, 'error').mockImplementation(() => {});
 
     await dispatchEmails(at(MINUTE));
     expect(await dispatchEmails(at(2 * MINUTE))).toEqual({ sent: 1, retried: 0, failed: 0 });
@@ -258,15 +261,20 @@ describe('runTick with email dispatch', () => {
 
     const failure = new Error('outbox exploded');
     const realFindMany = prisma.emailOutbox.findMany.bind(prisma.emailOutbox);
-    vi.spyOn(prisma.emailOutbox, 'findMany')
+    const findMany = vi
+      .spyOn(prisma.emailOutbox, 'findMany')
       .mockImplementation(realFindMany as never)
       .mockRejectedValueOnce(failure);
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    await expect(runTick(tickAt)).resolves.toBeUndefined();
+    try {
+      await expect(runTick(tickAt)).resolves.toBeUndefined();
+      expect(console.error).toHaveBeenCalledTimes(1);
+      expect(console.error).toHaveBeenCalledWith(expect.stringContaining('dispatchEmails'), failure);
+    } finally {
+      // mockRestore() on a Prisma delegate leaves findMany unusable; put the real method back.
+      findMany.mockImplementation(realFindMany as never);
+    }
 
-    expect(consoleError).toHaveBeenCalledTimes(1);
-    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('dispatchEmails'), failure);
     expect((await prisma.sale.findUniqueOrThrow({ where: { id: toStart.id } })).status).toBe('ACTIVE');
     expect((await prisma.sale.findUniqueOrThrow({ where: { id: toEnd.id } })).status).toBe('ENDED');
     expect((await prisma.reservation.findUniqueOrThrow({ where: { id: due.id } })).status).toBe('EXPIRED');
@@ -281,14 +289,18 @@ describe('runTick with email dispatch', () => {
       data: { type: 'ORDER_PAID', userId: user.id, toEmail: user.email, payload: { orderId: 1, amountCents: 100 } },
     });
     const realFindMany = prisma.sale.findMany.bind(prisma.sale);
-    vi.spyOn(prisma.sale, 'findMany')
+    const findMany = vi
+      .spyOn(prisma.sale, 'findMany')
       .mockImplementation(realFindMany as never)
       .mockRejectedValueOnce(new Error('startSales exploded'));
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    await runTick(NOW);
+    try {
+      await runTick(NOW);
+      expect(console.error).toHaveBeenCalledWith(expect.stringContaining('startSales'), expect.any(Error));
+    } finally {
+      findMany.mockImplementation(realFindMany as never);
+    }
 
-    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('startSales'), expect.any(Error));
     expect(sent.map((m) => m.to)).toEqual([user.email]);
     expect((await outboxRows()).map((r) => r.status)).toEqual(['SENT']);
   });
