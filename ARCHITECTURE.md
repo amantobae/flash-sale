@@ -54,6 +54,8 @@ flash-sale/
 
 &#x20; docker-compose.yml        # postgres, postgres-test, backend, frontend
 
+&#x20; scripts/demo.ts, restart-check.ts   # npm run demo, npm run restart-check
+
 &#x20; backend/
 
 &#x20;   prisma/schema.prisma, migrations/, seed.ts   # npm run seed: demo product + sale, idempotent

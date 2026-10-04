@@ -262,8 +262,9 @@ Commit history (full list: `git log --format="%h %ad %s" --date=format:"%Y-%m-%d
 | 2026-10-04 16:32 +0600 | `e17be76` | demo script |
 | 2026-10-04 16:35 +0600 | `cd437ee` | demo revenue check scoped to that sale |
 | 2026-10-04 16:35 +0600 | `103a693` | restart check |
+| 2026-10-04 16:37 +0600 | `776adea` | final README |
 
-Not every commit is in the table. `git log` is the full history.
+Not every commit is in the table. `git log` is the full history. The step 7 decisions entry is the commit after `776adea`.
 
 ## Third-party code
 
