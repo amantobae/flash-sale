@@ -12,6 +12,7 @@ export function orderRoutes() {
       orders: orders.map(({ payments, ...order }) => ({
         ...orderDto(order),
         paymentStatus: payments[0]?.status ?? null,
+        paymentId: payments[0]?.id ?? null,
       })),
     });
   });

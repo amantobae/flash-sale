@@ -386,7 +386,7 @@ stateDiagram-v2
 
 \- `POST /api/payments/:id/resolve` — мок-вебхук без авторизации, 200 `{ order, payment }`, 404 `PAYMENT\_NOT\_FOUND`.
 
-\- `GET /api/orders/me` — заказы пользователя от новых к старым: `{ orders: [{ id, saleId, reservationId, amountCents, status, paymentStatus, createdAt }] }`, где `paymentStatus` — статус последнего платежа.
+\- `GET /api/orders/me` — заказы пользователя от новых к старым: `{ orders: [{ id, saleId, reservationId, amountCents, status, paymentStatus, paymentId, createdAt }] }`, где `paymentStatus` и `paymentId` — статус и id последнего платежа (`paymentId` нужен demo-кнопкам resolve).
 
 \- `GET /api/dashboard/sales/:id` — available/unsold, held, pending, sold, выручка, последние заказы, статистика outbox.
 
@@ -422,7 +422,7 @@ stateDiagram-v2
 
 События дополняют REST, а не заменяют его: при reconnect и при достижении нуля локальным таймером клиент перезапрашивает состояние.
 
-Клиент (шаг 5b): один сокет на вкладку. На каждый `connect` (первый и после reconnect) клиент сначала входит в `sale:{id}` и `user:{id}` и ждёт ack, затем перезапрашивает `GET /api/sales/current`, `GET /api/reservations/me` и `GET /api/orders/me`. Пользователь хранится в `sessionStorage`, поэтому две вкладки могут быть двумя разными пользователями. `GET /api/orders/me` не отдаёт id платежа, поэтому для demo-кнопок resolve клиент запоминает `payment.id` из ответа checkout `PENDING` в `sessionStorage` той вкладки, которая начала оплату. Новая распродажа, созданная seed-ом, в открытые вкладки не приходит (событий о новых распродажах нет), её видно после перезагрузки.
+Клиент (шаг 5b): один сокет на вкладку. На каждый `connect` (первый и после reconnect) клиент сначала входит в `sale:{id}` и `user:{id}` и ждёт ack, затем перезапрашивает `GET /api/sales/current`, `GET /api/reservations/me` и `GET /api/orders/me`. Пользователь хранится в `sessionStorage`, поэтому две вкладки могут быть двумя разными пользователями. Demo-кнопки resolve берут `paymentId` из `GET /api/orders/me`, поэтому работают в любой вкладке этого пользователя. Новая распродажа, созданная seed-ом, в открытые вкладки не приходит (событий о новых распродажах нет), её видно после перезагрузки.
 
 
 

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { ApiError, api, describeError, newUuid, rememberPayment } from '../api/client';
+import { ApiError, api, describeError, newUuid } from '../api/client';
 import { useCountdown } from '../hooks/useCountdown';
 import type { SaleStore } from '../hooks/useSale';
 import { formatCents, formatCountdown } from '../lib/format';
@@ -15,8 +15,7 @@ function MessageLine({ message, reservationId }: { message: Message | null; rese
 }
 
 export function Cart({ store }: { store: SaleStore }) {
-  const { user, sale, offset, reservation, paymentAttempt, refetchSale, refetchCart, refetchOrders, setReservation } =
-    store;
+  const { sale, offset, reservation, paymentAttempt, refetchSale, refetchCart, refetchOrders, setReservation } = store;
   const [outcome, setOutcome] = useState<PaymentStatus>('SUCCESS');
   const [busy, setBusy] = useState<'pay' | 'cancel' | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
@@ -63,7 +62,6 @@ export function Cart({ store }: { store: SaleStore }) {
       try {
         const { order, payment } = await api.checkout(current.id, started.key, outcome);
         paymentAttempt.current = finishAttempt(started, payment.status);
-        if (payment.status === 'PENDING') rememberPayment(user.id, order.id, payment.id);
         if (payment.status === 'SUCCESS') setMessage({ tone: 'ok', text: `Paid. Order #${order.id} is confirmed.` });
         if (payment.status === 'PENDING')
           setMessage({ tone: 'ok', text: `Payment for order #${order.id} is pending. See Orders.` });

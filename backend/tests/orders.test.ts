@@ -37,14 +37,18 @@ async function reserveFor(saleId: number, userId: number): Promise<number> {
   return res.body.reservation.id;
 }
 
+const paymentIds = new Map<number, number>();
+
+// Returns the order id and remembers the id of the order's latest payment.
 async function pay(reservationId: number, userId: number, result: CheckoutOutcome) {
   const res = await checkoutRequest(server, reservationId, userId, result);
   expect(outcome(res)).toBe('200 OK');
+  paymentIds.set(res.body.order.id, res.body.payment.id);
   return res.body.order.id as number;
 }
 
 describe('GET /api/orders/me', () => {
-  it("(l) lists only the user's own orders, newest first, with order and latest payment status", async () => {
+  it("(l) lists only the user's own orders, newest first, with order and latest payment status and id", async () => {
     const sales = [];
     for (const priceCents of [1000, 2000, 3000, 4000]) {
       sales.push(await createSale({ totalStock: 3, priceCents, ...openWindow }));
@@ -61,6 +65,7 @@ describe('GET /api/orders/me', () => {
     clock = at(2 * MINUTE);
     const retried = await reserveFor(sales[2].id, buyer.id);
     const retriedId = await pay(retried, buyer.id, 'FAILED');
+    const failedAttemptId = paymentIds.get(retriedId);
     clock = at(3 * MINUTE);
     expect(await pay(retried, buyer.id, 'SUCCESS')).toBe(retriedId);
 
@@ -78,6 +83,11 @@ describe('GET /api/orders/me', () => {
       [pendingId, sales[1].id, 2000, 'PENDING', 'PENDING'],
       [paidId, sales[0].id, 1000, 'PAID', 'SUCCESS'],
     ]);
+    expect(res.body.orders.map((o: { id: number; paymentId: number }) => [o.id, o.paymentId])).toEqual(
+      [failedId, retriedId, pendingId, paidId].map((id) => [id, paymentIds.get(id)]),
+    );
+    const retriedOrder = res.body.orders.find((o: { id: number }) => o.id === retriedId);
+    expect(retriedOrder.paymentId).not.toBe(failedAttemptId);
     expect(res.body.orders[0]).toMatchObject({
       reservationId: expect.any(Number),
       createdAt: at(4 * MINUTE).toISOString(),

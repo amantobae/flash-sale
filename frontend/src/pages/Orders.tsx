@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, describeError, paymentIdFor } from '../api/client';
+import { api, describeError } from '../api/client';
 import type { SaleStore } from '../hooks/useSale';
 import { formatCents } from '../lib/format';
 import type { Order, OrderStatus } from '../lib/types';
@@ -56,7 +56,7 @@ export function Orders({ store }: { store: SaleStore }) {
 function ResolveDemo({ order, store }: { order: Order; store: SaleStore }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const paymentId = paymentIdFor(store.user.id, order.id);
+  const { paymentId } = order;
 
   async function resolve(status: 'SUCCESS' | 'FAILED') {
     if (paymentId === null || busy) return;
@@ -75,18 +75,14 @@ function ResolveDemo({ order, store }: { order: Order; store: SaleStore }) {
   return (
     <fieldset style={{ border: '1px dashed #999' }}>
       <legend>Demo: simulate provider webhook</legend>
-      {paymentId === null ? (
-        <small>Payment id is only known in the tab that started this payment.</small>
-      ) : (
-        <span style={{ display: 'flex', gap: 6 }}>
-          <button onClick={() => resolve('SUCCESS')} disabled={busy}>
-            Resolve SUCCESS
-          </button>
-          <button onClick={() => resolve('FAILED')} disabled={busy}>
-            Resolve FAILED
-          </button>
-        </span>
-      )}
+      <span style={{ display: 'flex', gap: 6 }}>
+        <button onClick={() => resolve('SUCCESS')} disabled={busy || paymentId === null}>
+          Resolve SUCCESS
+        </button>
+        <button onClick={() => resolve('FAILED')} disabled={busy || paymentId === null}>
+          Resolve FAILED
+        </button>
+      </span>
       {error && <div style={{ color: 'crimson' }}>{error}</div>}
     </fieldset>
   );

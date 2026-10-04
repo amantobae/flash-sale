@@ -13,7 +13,6 @@ export class ApiError extends Error {
 
 // sessionStorage, not localStorage: every tab is its own session, so two tabs can be two users.
 const USER_KEY = 'flashSale.user';
-const paymentsKey = (userId: number) => `flashSale.pendingPayments.${userId}`;
 
 export function loadSession(): User | null {
   const raw = sessionStorage.getItem(USER_KEY);
@@ -37,26 +36,6 @@ let onUnauthorized: (() => void) | null = null;
 
 export function setUnauthorizedHandler(handler: (() => void) | null): void {
   onUnauthorized = handler;
-}
-
-// GET /api/orders/me has no payment id, so the id needed by the demo resolve button is
-// remembered from the checkout response in the tab that started the payment.
-export function rememberPayment(userId: number, orderId: number, paymentId: number): void {
-  const map = readPayments(userId);
-  map[orderId] = paymentId;
-  sessionStorage.setItem(paymentsKey(userId), JSON.stringify(map));
-}
-
-export function paymentIdFor(userId: number, orderId: number): number | null {
-  return readPayments(userId)[orderId] ?? null;
-}
-
-function readPayments(userId: number): Record<number, number> {
-  try {
-    return JSON.parse(sessionStorage.getItem(paymentsKey(userId)) ?? '{}') as Record<number, number>;
-  } catch {
-    return {};
-  }
 }
 
 // crypto.randomUUID only exists in secure contexts (https or localhost).

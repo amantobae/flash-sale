@@ -33,6 +33,7 @@ export type Order = {
   amountCents: number;
   status: OrderStatus;
   paymentStatus: PaymentStatus | null;
+  paymentId: number | null;
   createdAt: string;
 };
 

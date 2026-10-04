@@ -5,7 +5,7 @@ export async function listUserOrders(userId: number) {
     where: { userId },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     include: {
-      payments: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 1, select: { status: true } },
+      payments: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 1, select: { id: true, status: true } },
     },
   });
 }
