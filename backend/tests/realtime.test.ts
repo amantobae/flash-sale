@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { prisma } from '../src/db';
 import { endSales, expireReservations, startSales } from '../src/jobs/saleTicker';
+import { dispatchEmails } from '../src/modules/emails/dispatcher';
+import { resetSent } from '../src/modules/emails/mockMailer';
 import { resetDb } from './helpers/db';
 import { createSale, createUser, createUsers } from './helpers/factories';
 import { cancelRequest, checkoutRequest, outcome, reserveRequest, resolveRequest } from './helpers/http';
+import { failCommitsOn } from './helpers/failOnCommit';
 import { assertStockInvariant } from './helpers/invariant';
 import {
   clearAll,
@@ -71,25 +74,7 @@ const reservationUpdated = (reservationId: number, status: string) => [
   { reservationId, status },
 ];
 const orderUpdated = (orderId: number, status: string) => ['order:updated', { orderId, status }];
-
-// Installs a trigger that raises at COMMIT, after the whole transaction callback has run.
-async function failCommitsOn(table: 'Reservation' | 'Payment') {
-  await prisma.$executeRawUnsafe(`
-    CREATE OR REPLACE FUNCTION test_fail_on_commit() RETURNS trigger LANGUAGE plpgsql AS $$
-    BEGIN
-      RAISE EXCEPTION 'forced failure at commit';
-    END
-    $$
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE CONSTRAINT TRIGGER test_fail_on_commit AFTER INSERT ON "${table}"
-    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION test_fail_on_commit()
-  `);
-  return async () => {
-    await prisma.$executeRawUnsafe(`DROP TRIGGER IF EXISTS test_fail_on_commit ON "${table}"`);
-    await prisma.$executeRawUnsafe('DROP FUNCTION IF EXISTS test_fail_on_commit()');
-  };
-}
+const changed = (saleId: number) => ['dashboard:changed', { saleId }];
 
 describe('realtime: sale:stock on reserve', () => {
   it('(a) two clients in sale:{id} and the dashboard receive sale:stock with the new availableStock', async () => {
@@ -104,7 +89,7 @@ describe('realtime: sale:stock on reserve', () => {
 
     expect(first.events).toEqual([stock(sale.id, 4)]);
     expect(second.events).toEqual([stock(sale.id, 4)]);
-    expect(dashboard.events).toEqual([stock(sale.id, 4)]);
+    expect(dashboard.events).toEqual([stock(sale.id, 4), changed(sale.id)]);
     await assertStockInvariant(sale.id);
   });
 
@@ -116,7 +101,7 @@ describe('realtime: sale:stock on reserve', () => {
     await reserveFor(sale.id, user.id);
     await both.flush();
 
-    expect(both.events).toEqual([stock(sale.id, 4)]);
+    expect(both.events).toEqual([stock(sale.id, 4), changed(sale.id)]);
   });
 
   it('(b) a client not in the room receives nothing', async () => {
@@ -144,7 +129,7 @@ describe('realtime: sale:stock on reserve', () => {
 
     await reserveFor(sale.id, a.id);
     await watcher.flush();
-    expect(watcher.events).toEqual([stock(sale.id, 0)]);
+    expect(watcher.events).toEqual([stock(sale.id, 0), changed(sale.id)]);
     watcher.clear();
 
     expect(outcome(await reserveRequest(rt.server, sale.id, a.id))).toBe('409 ALREADY_RESERVED');
@@ -235,7 +220,7 @@ describe('realtime: sale start and end', () => {
       },
     ];
     expect(room.events).toEqual([activeStatus]);
-    expect(dashboard.events).toEqual([activeStatus]);
+    expect(dashboard.events).toEqual([activeStatus, changed(sale.id)]);
 
     clearAll(room, dashboard);
     await startSales(at(2 * MINUTE));
@@ -270,7 +255,7 @@ describe('realtime: sale start and end', () => {
       },
     ];
     expect(room.events).toEqual([endedStatus, stock(sale.id, 4)]);
-    expect(dashboard.events).toEqual([endedStatus, stock(sale.id, 4)]);
+    expect(dashboard.events).toEqual([endedStatus, stock(sale.id, 4), changed(sale.id)]);
     expect(aClient.events).toEqual([reservationUpdated(resA, 'EXPIRED')]);
     expect(bClient.events).toEqual([reservationUpdated(resB, 'EXPIRED')]);
     expect(pendingClient.events).toEqual([]);
@@ -302,7 +287,7 @@ describe('realtime: payments', () => {
     await flushAll(ownerClient, otherClient, dashboard, room);
 
     expect(ownerClient.events).toEqual([orderUpdated(orderId, 'PAID'), reservationUpdated(reservationId, 'COMPLETED')]);
-    expect(dashboard.events).toEqual([orderUpdated(orderId, 'PAID')]);
+    expect(dashboard.events).toEqual([orderUpdated(orderId, 'PAID'), changed(sale.id)]);
     expect(otherClient.events).toEqual([]);
     expect(room.events).toEqual([]);
 
@@ -332,7 +317,7 @@ describe('realtime: payments', () => {
       orderUpdated(orderId, 'PENDING'),
       reservationUpdated(reservationId, 'PAYMENT_PENDING'),
     ]);
-    expect(dashboard.events).toEqual([orderUpdated(orderId, 'PENDING')]);
+    expect(dashboard.events).toEqual([orderUpdated(orderId, 'PENDING'), changed(sale.id)]);
     expect(room.events).toEqual([]);
     clearAll(ownerClient, dashboard);
 
@@ -342,7 +327,7 @@ describe('realtime: payments', () => {
       orderUpdated(orderId, 'FAILED'),
       reservationUpdated(reservationId, 'CANCELLED'),
     ]);
-    expect(dashboard.events).toEqual([orderUpdated(orderId, 'FAILED'), stock(sale.id, 3)]);
+    expect(dashboard.events).toEqual([orderUpdated(orderId, 'FAILED'), stock(sale.id, 3), changed(sale.id)]);
     expect(room.events).toEqual([stock(sale.id, 3)]);
     await assertStockInvariant(sale.id);
 
@@ -457,5 +442,57 @@ describe('realtime: join validation', () => {
     await reserveFor(sale.id, other.id);
     await valid.flush();
     expect(valid.events).toEqual([stock(sale.id, 3)]);
+  });
+});
+
+describe('realtime: dashboard:changed', () => {
+  it('(j) is emitted to the dashboard after a reserve and not after a 409', async () => {
+    const sale = await createSale({ totalStock: 1, ...openWindow });
+    const [a, b] = await createUsers(2);
+    const dashboard = await client(dashboardRoom);
+    const room = await client(saleRoom(sale.id), userRoom(a.id));
+
+    await reserveFor(sale.id, a.id);
+    await flushAll(dashboard, room);
+    expect(dashboard.events).toEqual([stock(sale.id, 0), changed(sale.id)]);
+    expect(room.events).toEqual([stock(sale.id, 0)]);
+    clearAll(dashboard, room);
+
+    expect(outcome(await reserveRequest(rt.server, sale.id, b.id))).toBe('409 SOLD_OUT');
+    expect(outcome(await reserveRequest(rt.server, sale.id, a.id))).toBe('409 ALREADY_RESERVED');
+    await flushAll(dashboard, room);
+    expect(dashboard.events).toEqual([]);
+    expect(room.events).toEqual([]);
+  });
+
+  it('is emitted after cancel and expiry, and after dispatchEmails sends an email for the sale', async () => {
+    const sale = await createSale({ totalStock: 5, ...openWindow });
+    const [a, b, buyer] = await createUsers(3);
+    const cancelled = await reserveFor(sale.id, a.id);
+    await reserveFor(sale.id, b.id);
+    const paid = await reserveFor(sale.id, buyer.id);
+    expect(outcome(await checkoutRequest(rt.server, paid, buyer.id, 'SUCCESS'))).toBe('200 OK');
+    const dashboard = await client(dashboardRoom);
+
+    expect(outcome(await cancelRequest(rt.server, cancelled, a.id))).toBe('200 OK');
+    await expireReservations(at(HOLD_MS));
+    await dashboard.flush();
+    expect(dashboard.events).toEqual([stock(sale.id, 3), changed(sale.id), stock(sale.id, 4), changed(sale.id)]);
+    dashboard.clear();
+
+    resetSent();
+    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await dispatchEmails(at(HOLD_MS));
+      await dashboard.flush();
+      expect(dashboard.events).toEqual([changed(sale.id)]);
+      dashboard.clear();
+
+      await dispatchEmails(at(HOLD_MS));
+      await dashboard.flush();
+      expect(dashboard.events).toEqual([]);
+    } finally {
+      consoleLog.mockRestore();
+    }
   });
 });

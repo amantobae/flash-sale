@@ -39,6 +39,18 @@ export function myOrdersRequest(target: Server, userId: number) {
   return request(target).get('/api/orders/me').set('X-User-Id', String(userId));
 }
 
+export function dashboardRequest(target: Server, saleId: number) {
+  return request(target).get(`/api/dashboard/sales/${saleId}`);
+}
+
+export function createSaleRequest(target: Server, body: object) {
+  return request(target).post('/api/dashboard/sales').send(body);
+}
+
+export function updateSaleRequest(target: Server, saleId: number, body: object) {
+  return request(target).put(`/api/dashboard/sales/${saleId}`).send(body);
+}
+
 export function countBy<T>(items: T[], key: (item: T) => string) {
   const counts: Record<string, number> = {};
   for (const item of items) counts[key(item)] = (counts[key(item)] ?? 0) + 1;
